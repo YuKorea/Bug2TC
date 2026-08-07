@@ -60,7 +60,7 @@ RESPONSE_SCHEMA = {
     ],
 }
 
-SYSTEM_PROMPT = """당신은 ERD 모델링 툴(ERgrin)의 QA 테스트케이스를 작성하는 시니어 QA 엔지니어입니다.
+SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 QA 테스트케이스를 작성하는 시니어 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
