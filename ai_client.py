@@ -61,7 +61,7 @@ RESPONSE_SCHEMA = {
 }
 
 SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
-Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
+Yona에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
 반드시 지켜야 할 규칙:
@@ -137,7 +137,7 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
 if __name__ == "__main__":
     # 실제 로컬 모델 호출 테스트 (Ollama가 실행 중이고 모델이 받아져 있어야 동작)
     sample_bug = """
-제목: 298 도메인명 공백 입력 및 Trim 미처리로 인한 중복 등록 가능 버그
+제목: #298 도메인명 공백 입력 및 Trim 미처리로 인한 중복 등록 가능 버그
 
 1.버그 설명
 도메인명 입력 시 공백만 입력해도 저장이 가능하며, 앞뒤 공백(trim)이 제거되지 않아
@@ -157,7 +157,7 @@ trim 결과가 빈값이면 저장 불가 처리되어야 함
 앞뒤 공백이 제거되지 않고 그대로 저장됨
 
 5.버전 정보
-v 3.0.17.3
+v 0.0
 """
     result = generate_test_case(sample_bug, scenario_hint="공백만 입력하는 케이스만")
     print(json.dumps(result, ensure_ascii=False, indent=2))
