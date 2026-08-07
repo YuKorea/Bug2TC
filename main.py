@@ -1,7 +1,10 @@
 """
+main.py
+AI 기반 Test Case Generator - CLI 진입점 (V1)
+
 사용 흐름:
 1. Yona 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
-2. ollama API가 테스트케이스로 변환
+2. 로컬 AI(Ollama)가 테스트케이스로 변환
 3. 결과를 미리 보여주고, 저장할지 확인
 4. testcase.xlsx 에 한 행 추가
 5. 계속 반복할지 물어봄 (여러 버그를 연달아 처리 가능)
@@ -10,10 +13,11 @@
 import sys
 import json
 
-from ai_client import generate_test_case
+from ai_client import generate_test_case, generate_test_cases_multi
 from excel_writer import append_test_case, COLUMNS
+from paths import get_desktop_path
 
-OUTPUT_FILE = "testcase.xlsx"
+OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
 
 
 def read_multiline_input(prompt: str) -> str:
@@ -31,9 +35,12 @@ def read_multiline_input(prompt: str) -> str:
     return "\n".join(lines)
 
 
-def preview(tc_data: dict) -> None:
+def preview(tc_data: dict, index: int = None) -> None:
     print("\n" + "=" * 60)
-    print("생성된 테스트케이스 미리보기")
+    if index is not None:
+        print(f"생성된 테스트케이스 미리보기 [{index}]")
+    else:
+        print("생성된 테스트케이스 미리보기")
     print("=" * 60)
     print(f"버그 번호   : {tc_data.get('bug_id')}")
     print(f"카테고리    : {tc_data.get('category')}")
@@ -49,21 +56,85 @@ def preview(tc_data: dict) -> None:
     print("=" * 60)
 
 
+def _parse_selection(raw: str, max_index: int) -> list:
+    """'1,3' / 'all' / '' 같은 입력을 실제 인덱스 리스트(1-based)로 변환."""
+    raw = raw.strip().lower()
+    if raw in ("all", "전체", ""):
+        return list(range(1, max_index + 1))
+    if raw in ("n", "no", "none"):
+        return []
+    indices = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            n = int(part)
+            if 1 <= n <= max_index:
+                indices.append(n)
+    return indices
+
+
+def run_multi(bug_report: str) -> None:
+    """버그 리포트 하나에서 여러 시나리오를 한 번에 뽑아서, 선택적으로 저장."""
+    print("\n시나리오 추출 중... (버그 리포트 안에서 서로 다른 검증 케이스를 찾는 중)")
+    try:
+        tc_list = generate_test_cases_multi(bug_report)
+    except RuntimeError as e:
+        print(f"\n[설정 오류] {e}")
+        return
+    except ValueError as e:
+        print(f"\n[AI 응답 오류] {e}")
+        return
+    except Exception as e:
+        print(f"\n[예상치 못한 오류] {type(e).__name__}: {e}")
+        return
+
+    print(f"\n총 {len(tc_list)}개의 시나리오를 찾았습니다.")
+    for i, tc_data in enumerate(tc_list, start=1):
+        preview(tc_data, index=i)
+
+    selection_raw = input(
+        f"\n저장할 번호를 입력하세요 (예: 1,3 / all=전체 / n=저장 안 함): "
+    ).strip()
+    selected_indices = _parse_selection(selection_raw, len(tc_list))
+
+    if not selected_indices:
+        print("저장하지 않고 건너뜁니다.")
+        return
+
+    for i in selected_indices:
+        tc_data = tc_list[i - 1]
+        try:
+            tc_id = append_test_case(OUTPUT_FILE, tc_data["bug_id"], tc_data)
+            print(f"저장 완료: [{i}] {tc_id} -> {OUTPUT_FILE}")
+        except PermissionError as e:
+            print(f"[저장 실패] [{i}] {e}")
+        except Exception as e:
+            print(f"[저장 실패] [{i}] {type(e).__name__}: {e}")
+
+
 def run_once() -> None:
     bug_report = read_multiline_input("\nYona 버그 리포트를 붙여넣으세요.")
     if not bug_report.strip():
         print("입력이 비어 있어 취소합니다.")
         return
 
+    multi_mode = input(
+        "\n이 버그에 시나리오가 여러 개 섞여 있나요? 한 번에 다 뽑을까요? (y/n): "
+    ).strip().lower()
+
+    if multi_mode == "y":
+        run_multi(bug_report)
+        return
+
     scenario_hint = input(
         "\n(선택) 이번에 뽑을 시나리오 힌트가 있으면 입력, 없으면 그냥 Enter: "
     ).strip()
 
-    print("\n API 호출 중...")
+    print("\n로컬 AI 모델 호출 중... (처음 실행이거나 CPU만 쓰는 경우 다소 걸릴 수 있어요)")
     try:
         tc_data = generate_test_case(bug_report, scenario_hint=scenario_hint)
     except RuntimeError as e:
-        # ANTHROPIC_API_KEY 미설정 등
+        # Ollama 연결 실패 등
         print(f"\n[설정 오류] {e}")
         return
     except ValueError as e:
@@ -81,8 +152,13 @@ def run_once() -> None:
         print("저장하지 않고 건너뜁니다.")
         return
 
-    tc_id = append_test_case(OUTPUT_FILE, tc_data["bug_id"], tc_data)
-    print(f"\n저장 완료: {tc_id} -> {OUTPUT_FILE}")
+    try:
+        tc_id = append_test_case(OUTPUT_FILE, tc_data["bug_id"], tc_data)
+        print(f"\n저장 완료: {tc_id} -> {OUTPUT_FILE}")
+    except PermissionError as e:
+        print(f"\n[저장 실패] {e}")
+    except Exception as e:
+        print(f"\n[저장 실패] {type(e).__name__}: {e}")
 
 
 def main() -> None:

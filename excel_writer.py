@@ -131,7 +131,14 @@ def append_test_case(path: str, bug_id: str, tc_data: dict) -> str:
         cell.alignment = WRAP
         cell.border = BORDER
 
-    wb.save(path)
+    try:
+        wb.save(path)
+    except PermissionError as e:
+        raise PermissionError(
+            f"'{path}' 파일에 저장할 수 없습니다. "
+            "Excel에서 이 파일을 열어두신 상태라면 닫고 다시 시도해주세요."
+        ) from e
+
     return tc_id
 
 

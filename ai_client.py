@@ -60,8 +60,8 @@ RESPONSE_SCHEMA = {
     ],
 }
 
-SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
-Yona에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
+SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
+Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
 반드시 지켜야 할 규칙:
@@ -71,6 +71,33 @@ Yona에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양�
 4. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
 5. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
 6. 모든 필드는 한국어로 작성합니다."""
+
+MULTI_SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
+Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 서로 다른 검증 시나리오를 모두 찾아내고,
+각 시나리오마다 하나씩 독립된 테스트케이스를 생성합니다.
+
+반드시 지켜야 할 규칙:
+1. 버그 리포트를 꼼꼼히 읽고, 실제로 서로 다른 조건/입력값/경로로 검증해야 하는 시나리오를 모두 구분해냅니다.
+   예: "공백만 입력" 케이스와 "앞뒤 공백 포함 중복 등록" 케이스는 입력값과 검증 포인트가 다르므로 별개 시나리오입니다.
+2. 같은 내용을 표현만 바꿔서 중복 생성하지 않습니다. 진짜로 다른 조건/결과를 검증하는 경우만 별도 시나리오로 나눕니다.
+3. 시나리오가 하나뿐이면 배열에 하나만 넣어서 반환합니다. 억지로 여러 개로 쪼개지 않습니다.
+4. steps는 실제 재현 가능한 조작 순서로 작성합니다.
+5. expected는 버그 리포트의 '기대 결과'를 근거로, 통과/실패를 판단할 수 있는 검증 가능한 문장으로 씁니다.
+6. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
+7. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
+8. 모든 필드는 한국어로 작성합니다."""
+
+MULTI_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scenarios": {
+            "type": "array",
+            "items": RESPONSE_SCHEMA,
+            "description": "버그 리포트에서 찾아낸 서로 다른 검증 시나리오별 테스트케이스 목록",
+        },
+    },
+    "required": ["scenarios"],
+}
 
 
 def _extract_bug_id(bug_report_text: str) -> str:
@@ -134,10 +161,75 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
     return tc_data
 
 
+def _connection_error(e: Exception) -> RuntimeError:
+    return RuntimeError(
+        "Ollama에 연결할 수 없습니다. 다음을 확인해주세요:\n"
+        "1) Ollama가 설치되어 있고 백그라운드에서 실행 중인지\n"
+        f"2) 'ollama pull {MODEL}' 로 모델을 받아두었는지\n"
+        f"원본 오류: {type(e).__name__}: {e}"
+    )
+
+
+def generate_test_cases_multi(bug_report_text: str) -> list:
+    """
+    버그 리포트 하나에 여러 검증 시나리오가 섞여 있을 때, 이를 모두 찾아내서
+    시나리오별로 하나씩 테스트케이스를 생성 (한 번의 호출로 전부 뽑음).
+
+    반환: [{"category", "title", ..., "bug_id"}, ...] (시나리오가 1개면 리스트 길이 1)
+    """
+    client = Client()
+
+    user_content = f"[버그 리포트]\n{bug_report_text}"
+
+    try:
+        response = client.chat(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": MULTI_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            format=MULTI_RESPONSE_SCHEMA,
+            options={"temperature": 0.2},
+        )
+    except Exception as e:
+        raise _connection_error(e) from e
+
+    raw_content = response.message.content
+
+    try:
+        parsed = json.loads(raw_content)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"모델 응답을 JSON으로 파싱하지 못했습니다.\n원본 응답:\n{raw_content}"
+        ) from e
+
+    scenarios = parsed.get("scenarios", [])
+    if not scenarios:
+        raise ValueError(f"모델이 시나리오를 하나도 반환하지 않았습니다.\n응답: {parsed}")
+
+    required_keys = {
+        "category", "title", "purpose", "precondition",
+        "input_value", "steps", "expected",
+    }
+    bug_id = _extract_bug_id(bug_report_text)
+
+    result = []
+    for i, tc_data in enumerate(scenarios, start=1):
+        missing = required_keys - tc_data.keys()
+        if missing:
+            raise ValueError(
+                f"{i}번째 시나리오 응답에 필수 키가 빠져 있습니다: {missing}\n응답: {tc_data}"
+            )
+        tc_data["bug_id"] = bug_id
+        result.append(tc_data)
+
+    return result
+
+
 if __name__ == "__main__":
     # 실제 로컬 모델 호출 테스트 (Ollama가 실행 중이고 모델이 받아져 있어야 동작)
     sample_bug = """
-제목: #298 도메인명 공백 입력 및 Trim 미처리로 인한 중복 등록 가능 버그
+제목: 298 도메인명 공백 입력 및 Trim 미처리로 인한 중복 등록 가능 버그
 
 1.버그 설명
 도메인명 입력 시 공백만 입력해도 저장이 가능하며, 앞뒤 공백(trim)이 제거되지 않아
