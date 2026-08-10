@@ -2,6 +2,31 @@
 
 **Yona 버그 리포트 ↔ QA 테스트케이스를 양방향으로 변환해주는 완전 로컬 AI 도구**
 
+                 ┌─────────────────┐
+                 │   CLI / GUI     │
+                 └────────┬────────┘
+                          │
+             ┌────────────┴────────────┐
+             │                         │
+      Bug → Test Case           Test Case → Bug
+             │                         │
+             ↓                         ↓
+       ai_client.py          bug_report_generator.py
+             │                         │
+             └────────────┬────────────┘
+                          ↓
+                    Ollama / Qwen
+                          │
+                          ↓
+                    Generated Data
+                          │
+              ┌───────────┴───────────┐
+              ↓                       ↓
+        excel_writer.py          Text Output
+              │
+              ↓
+        testcase.xlsx
+
 이 프로젝트는 **Ollama 기반의 로컬 LLM**을 사용하여 Yona 버그 리포트와 QA 테스트케이스를 서로 변환합니다.
 
 모든 AI 처리는 사용자의 PC에서 실행되므로:
@@ -811,12 +836,16 @@ Ollama / Qwen 2.5 7B
 
 # 기술 스택
 
-* Python
-* Ollama
-* Qwen 2.5 7B
-* Tkinter
-* openpyxl
-* PyInstaller
+| Technology          | Purpose                       |
+| ------------------- | ----------------------------- |
+| Python              | Application logic             |
+| Ollama              | Local LLM inference           |
+| Qwen 2.5 7B         | Natural language generation   |
+| Tkinter             | Desktop GUI                   |
+| openpyxl            | Excel automation              |
+| PyInstaller         | Windows executable packaging  |
+| Similarity matching | Duplicate test case detection |
+
 
 ---
 
@@ -829,6 +858,31 @@ ypark.uk@gmail.com
 # AI Test Case Generator
 
 **A fully local AI tool for bidirectional conversion between Yona bug reports and QA test cases**
+
+                 ┌─────────────────┐
+                 │   CLI / GUI     │
+                 └────────┬────────┘
+                          │
+             ┌────────────┴────────────┐
+             │                         │
+      Bug → Test Case           Test Case → Bug
+             │                         │
+             ↓                         ↓
+       ai_client.py          bug_report_generator.py
+             │                         │
+             └────────────┬────────────┘
+                          ↓
+                    Ollama / Qwen
+                          │
+                          ↓
+                    Generated Data
+                          │
+              ┌───────────┴───────────┐
+              ↓                       ↓
+        excel_writer.py          Text Output
+              │
+              ↓
+        testcase.xlsx
 
 This project uses a **local LLM powered by Ollama** to convert Yona bug reports into structured QA test cases and failed test cases into ready-to-use Yona bug reports.
 
@@ -1659,12 +1713,16 @@ Failed Test Case
 
 # Tech Stack
 
-* Python
-* Ollama
-* Qwen 2.5 7B
-* Tkinter
-* openpyxl
-* PyInstaller
+| Technology          | Purpose                       |
+| ------------------- | ----------------------------- |
+| Python              | Application logic             |
+| Ollama              | Local LLM inference           |
+| Qwen 2.5 7B         | Natural language generation   |
+| Tkinter             | Desktop GUI                   |
+| openpyxl            | Excel automation              |
+| PyInstaller         | Windows executable packaging  |
+| Similarity matching | Duplicate test case detection |
+
 
 ---
 
