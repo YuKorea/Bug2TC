@@ -1,6 +1,6 @@
 # AI 기반 Test Case Generator
 
-**Yona 버그 리포트 ↔ QA 테스트케이스를 양방향으로 변환해주는 완전 로컬 AI 도구**
+**버그 리포트 ↔ QA 테스트케이스를 양방향으로 변환해주는 완전 로컬 AI 도구**
 
                  ┌─────────────────┐
                  │   CLI / GUI     │
@@ -27,7 +27,7 @@
               ↓
         testcase.xlsx
 
-이 프로젝트는 **Ollama 기반의 로컬 LLM**을 사용하여 Yona 버그 리포트와 QA 테스트케이스를 서로 변환합니다.
+이 프로젝트는 **Ollama 기반의 로컬 LLM**을 사용하여 (Yona) 버그 리포트와 QA 테스트케이스를 서로 변환합니다.
 
 모든 AI 처리는 사용자의 PC에서 실행되므로:
 
@@ -44,7 +44,7 @@ CLI(`main.py`)와 GUI(`gui.py`) 두 가지 방식으로 사용할 수 있으며,
 
 ### 1. 버그 리포트 → 테스트케이스
 
-Yona 버그 리포트를 그대로 붙여넣으면 회사에서 사용하는 테스트케이스 형식에 맞춰 AI가 테스트케이스를 생성합니다.
+버그 리포트를 그대로 붙여넣으면 회사에서 사용하는 테스트케이스 형식에 맞춰 AI가 테스트케이스를 생성합니다.
 
 * 단일 시나리오 테스트케이스 생성
 * 여러 시나리오 자동 추출
@@ -454,7 +454,7 @@ Excel에 저장
 텍스트 파일로 저장
 ```
 
-생성된 버그 리포트는 Yona에 바로 붙여넣을 수 있습니다.
+생성된 버그 리포트는 (Yona) 이슈 트래커에 바로 붙여넣을 수 있습니다.
 
 ---
 
@@ -722,7 +722,7 @@ Unknown Publisher
 
 현재 다음 기능은 구현되어 있지 않습니다.
 
-### Yona API 연동
+### Yona/이슈트래커 API 연동
 
 현재는 Yona REST API를 직접 호출하지 않습니다.
 
@@ -780,7 +780,7 @@ OpenAI, Claude 등의 외부 클라우드 API를 사용하지 않습니다.
 ## 버그 → 테스트케이스
 
 ```text
-Yona 버그 리포트
+    버그 리포트
        │
        ▼
 TCGenerator
@@ -824,13 +824,13 @@ Ollama / Qwen 2.5 7B
        Ollama / Qwen 2.5 7B
               │
               ▼
-       Yona 버그 리포트 생성
+       버그 리포트 생성
               │
               ▼
           사용자 확인
               │
               ▼
-        Yona에 붙여넣기
+     Yona/이슈트래커에 붙여넣기
 ```
 ---
 
@@ -857,7 +857,7 @@ ypark.uk@gmail.com
 
 # AI Test Case Generator
 
-**A fully local AI tool for bidirectional conversion between Yona bug reports and QA test cases**
+**A fully local AI tool for bidirectional conversion between (Yona) bug reports and QA test cases**
 
                  ┌─────────────────┐
                  │   CLI / GUI     │
@@ -901,7 +901,7 @@ The project supports both a CLI (`main.py`) and a GUI (`gui.py`). The GUI can al
 
 ## 1. Bug Report → Test Case
 
-Paste a Yona bug report into the application and the AI generates a structured test case using the team's Excel format.
+Paste a (Yona) bug report into the application and the AI generates a structured test case using the team's Excel format.
 
 The AI automatically generates:
 
@@ -1294,7 +1294,7 @@ The application has two tabs.
 Workflow:
 
 ```text
-Paste Yona bug report
+Paste bug report
         ↓
 Generate Test Case
         ↓
@@ -1333,7 +1333,7 @@ Review result
 Save as Text File
 ```
 
-The generated report can be copied directly into Yona.
+The generated report can be copied directly into Yona/issue tracker.
 
 ---
 
@@ -1596,9 +1596,9 @@ Therefore, each user can maintain their own local test case file.
 
 # Known Limitations
 
-## Yona API Integration
+## (Yona)issue tracker API Integration
 
-Yona REST API integration has not been implemented yet.
+(Yona) REST API integration has not been implemented yet.
 
 Bug reports must currently be copied and pasted manually.
 
@@ -1656,7 +1656,7 @@ Input data is processed by the locally running Ollama model rather than being se
 ## Bug Report → Test Case
 
 ```text
-Yona Bug Report
+  Bug Report
        │
        ▼
   TCGenerator
@@ -1700,7 +1700,7 @@ Failed Test Case
        Ollama / Qwen 2.5 7B
                 │
                 ▼
-       Yona Bug Report
+            Bug Report
                 │
                 ▼
            User Review
