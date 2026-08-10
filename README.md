@@ -304,6 +304,9 @@ TC_298_03
 
 ---
 
+<img width="967" height="868" alt="tc2br" src="https://github.com/user-attachments/assets/0a605718-bfb5-4e19-9dce-7a57a7df6196" />
+
+
 # 3-2. 테스트케이스 → 버그 리포트
 
 실패한 테스트케이스를 기반으로 Yona 버그 리포트를 생성할 수 있습니다.
