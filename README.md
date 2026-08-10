@@ -238,7 +238,7 @@ python main.py
 
 ## 3-1. 버그 리포트 → 테스트케이스
 
-<img width="921" height="827" alt="br2tc" src="https://github.com/user-attachments/assets/ea3295c9-1751-4da6-9e22-dbf5f53999cf" />
+<img width="904" height="816" alt="br2tc" src="https://github.com/user-attachments/assets/6788a22a-f761-47db-8d39-9d8d7f8c01b9" />
 
 
 ### Step 1. Yona 버그 리포트 입력
