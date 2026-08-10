@@ -1,6 +1,6 @@
 """
 main.py
-AI 기반 Test Case Generator - CLI 진입점 (V1)
+AI 기반 Test Case Generator - CLI (V1)
 
 사용 흐름:
 1. Yona 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
