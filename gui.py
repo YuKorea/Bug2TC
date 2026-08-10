@@ -5,9 +5,6 @@ AI 기반 Test Case Generator - Tkinter GUI (V2, 양방향 지원)
 탭 1: 버그 리포트 -> 테스트케이스 (Excel 저장)
 탭 2: 테스트케이스 -> 버그 리포트 (텍스트 파일 저장)
 
-main.py(CLI)와 동일한 로직(ai_client, excel_writer, bug_report_generator)을
-그대로 재사용합니다. API 호출은 백그라운드 스레드에서 실행해서 UI가 멈추지 않도록 처리했습니다.
-
 실행: python gui.py
 """
 
