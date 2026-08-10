@@ -137,7 +137,23 @@ CLI와 GUI 모두 지원합니다.
 
 최종 저장 여부는 사용자가 판단합니다.
 
-### 5. 기타 기능
+### 5. 생성 결과 직접 수정 후 저장 
+
+AI가 생성한 결과를 그대로 저장하는 대신, 저장하기 전에 직접 내용을 고칠 수 있습니다.
+일부 필드만 살짝 어긋난 경우에도 전체를 다시 생성할 필요 없이 바로 수정해서 저장할 수 있습니다.
+
+**CLI**
+
+* 미리보기 후 "내용을 수정할까요? (y/n)" 질문 추가
+* `y` 선택 시 항목 번호로 원하는 필드만 골라 수정 (예: `2,4` = 테스트 제목 + 사전조건만), 테스트 절차는 여러 줄로 통째로 재입력 가능
+* 다중 시나리오 모드에서도 저장 전 항목별로 개별 수정 가능
+
+**GUI**
+
+* 탭 1: 읽기전용 미리보기 텍스트를 없애고, 카테고리/제목/목적/사전조건/입력값/절차/기대결과 각각 편집 가능한 입력칸으로 교체 — 생성 직후 바로 고쳐서 저장 가능
+* 탭 2: 버그 리포트 결과 텍스트도 이제 바로 수정 가능 (저장 시 수정한 내용 그대로 저장됨)
+
+### 6. 기타 기능
 
 * Excel 자동 저장
 * TC_ID 자동 채번
@@ -311,11 +327,13 @@ n
 
 ---
 
-### Step 3. 결과 확인
+### Step 3. 결과 확인 및 직접 수정
 
 AI가 생성한 테스트케이스를 저장하기 전에 미리 보여줍니다.
 
 기존 `testcase.xlsx`에 유사한 테스트케이스가 있는 경우 경고가 표시됩니다.
+
+내용이 조금 어긋난 경우, "내용을 수정할까요? (y/n)"에서 `y`를 선택하면 항목 번호로 원하는 필드만 골라 직접 고칠 수 있습니다 (예: `2,4` = 테스트 제목 + 사전조건만). 테스트 절차는 여러 줄로 통째로 재입력할 수 있습니다. 다중 시나리오 모드에서도 저장 전 각 항목을 개별적으로 수정할 수 있습니다.
 
 ---
 
@@ -378,7 +396,7 @@ END
 v2.8.3
 ```
 
-### Step 4. 버그 리포트 생성
+### Step 4. 버그 리포트 생성 및 직접 수정
 
 AI가 다음 내용을 정리하여 Yona/이슈트래커에 바로 붙여넣을 수 있는 형식으로 생성합니다.
 
@@ -391,6 +409,8 @@ AI가 다음 내용을 정리하여 Yona/이슈트래커에 바로 붙여넣을 
 실제 결과
 버전 정보
 ```
+
+생성된 결과는 저장 전에 자유롭게 직접 수정할 수 있고, 수정한 내용 그대로 저장됩니다.
 
 필요하면 생성된 버그 리포트를 `.txt` 파일로 Desktop에 저장할 수 있습니다.
 
@@ -419,12 +439,14 @@ Yona 버그 리포트 붙여넣기
         ↓
 테스트 케이스 생성
         ↓
-생성 결과 확인
+생성 결과 확인 (필드별로 직접 수정 가능)
         ↓
 유사 TC 존재 여부 확인
         ↓
 Excel에 저장
 ```
+
+생성 결과는 읽기전용이 아니라, 카테고리/제목/목적/사전조건/입력값/절차/기대결과가 각각 편집 가능한 입력칸으로 표시됩니다. 저장 전에 바로 고쳐서 저장할 수 있습니다.
 
 유사한 기존 테스트케이스가 발견되면 팝업으로 경고합니다.
 
@@ -449,12 +471,12 @@ Excel에 저장
         ↓
 버그 리포트 생성
         ↓
-결과 확인
+결과 확인 및 직접 수정
         ↓
 텍스트 파일로 저장
 ```
 
-생성된 버그 리포트는 (Yona) 이슈 트래커에 바로 붙여넣을 수 있습니다.
+생성된 버그 리포트 텍스트는 바로 수정할 수 있으며, 저장 시 수정한 내용 그대로 저장됩니다. (Yona) 이슈 트래커에 바로 붙여넣을 수 있습니다.
 
 ---
 
@@ -755,7 +777,7 @@ Ollama / Qwen 2.5 7B
         유사 TC 검사
                │
                ▼
-          사용자 확인
+          사용자 확인 / 직접 수정
                │
                ▼
         testcase.xlsx 저장
@@ -780,7 +802,7 @@ Ollama / Qwen 2.5 7B
        버그 리포트 생성
               │
               ▼
-          사용자 확인
+          사용자 확인 / 직접 수정
               │
               ▼
      Yona/이슈트래커에 붙여넣기
@@ -970,7 +992,25 @@ It does not prevent the user from saving the test case. The final decision is le
 
 ---
 
-## 5. Other Features
+## 5. Edit Generated Results Before Saving 
+
+Instead of saving whatever the AI generates as-is, you can now review and directly edit the result before it's saved.
+If only a small part of the output is off, there's no need to regenerate the whole thing — just fix it and save.
+
+**CLI**
+
+* After the preview, a new prompt asks "Would you like to edit the content? (y/n)"
+* Choosing `y` lets you pick specific fields by number to edit (e.g. `2,4` = Test Title + Precondition only); test steps can be re-entered as a full multi-line block
+* In multi-scenario mode, each selected item can also be edited individually before saving
+
+**GUI**
+
+* Tab 1: the read-only preview text has been replaced with individually editable fields for Category, Title, Objective, Precondition, Input Data, Steps, and Expected Result — you can fix them right after generation and save immediately
+* Tab 2: the generated bug report text is now directly editable as well (whatever you edit is exactly what gets saved)
+
+---
+
+## 6. Other Features
 
 * Automatic Excel append
 * Automatic TC_ID numbering
@@ -1147,11 +1187,13 @@ Generate only the whitespace-only input scenario
 
 ---
 
-### Step 3. Review the Generated Test Case
+### Step 3. Review and Edit the Generated Test Case
 
 The generated test case is displayed before saving.
 
 If a similar test case already exists in `testcase.xlsx`, the application displays a warning.
+
+If something is slightly off, answering `y` to "Would you like to edit the content? (y/n)" lets you pick specific fields by number to fix (e.g. `2,4` = Test Title + Precondition only). Test steps can be re-entered as a full multi-line block. In multi-scenario mode, each item can also be edited individually before saving.
 
 ---
 
@@ -1210,7 +1252,7 @@ Example:
 v2.8.3
 ```
 
-### Step 4. Generate the Bug Report
+### Step 4. Generate and Edit the Bug Report
 
 The AI organizes the information into a Yona-ready format:
 
@@ -1223,6 +1265,8 @@ Expected Result
 Actual Result
 Version
 ```
+
+The generated result can be freely edited before saving, and whatever you edit is exactly what gets saved.
 
 The generated report can optionally be saved as a `.txt` file on the Desktop.
 
@@ -1251,12 +1295,14 @@ Paste bug report
         ↓
 Generate Test Case
         ↓
-Review generated result
+Review result (each field directly editable)
         ↓
 Check for similar test cases
         ↓
 Save to Excel
 ```
+
+The generated result is no longer read-only — Category, Title, Objective, Precondition, Input Data, Steps, and Expected Result are each shown as editable fields. You can fix them and save immediately.
 
 If a similar existing test case is detected, a popup warning is displayed.
 
@@ -1281,12 +1327,12 @@ Enter version information
         ↓
 Generate Bug Report
         ↓
-Review result
+Review and edit result
         ↓
 Save as Text File
 ```
 
-The generated report can be copied directly into Yona/issue tracker.
+The generated bug report text can be edited directly, and whatever you edit is exactly what gets saved. The result can be copied directly into Yona/issue tracker.
 
 ---
 
@@ -1602,7 +1648,7 @@ Scenario Analysis
          Similarity Check
                 │
                 ▼
-          User Review
+       User Review / Edit
                 │
                 ▼
        Save to testcase.xlsx
@@ -1627,7 +1673,7 @@ Failed Test Case
             Bug Report
                 │
                 ▼
-           User Review
+       User Review / Edit
                 │
                 ▼
         Paste into Yona

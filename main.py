@@ -1,9 +1,9 @@
 """
 main.py
-AI 기반 Test Case Generator - CLI (V1)
+AI 기반 Test Case Generator - CLI 진입점 (V1)
 
 사용 흐름:
-1. Yona 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
+1. 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
 2. 로컬 AI(Ollama)가 테스트케이스로 변환
 3. 결과를 미리 보여주고, 저장할지 확인
 4. testcase.xlsx 에 한 행 추가
@@ -56,6 +56,54 @@ def preview(tc_data: dict, index: int = None) -> None:
         print(f"  {i}. {step}")
     print(f"기대결과    : {tc_data.get('expected')}")
     print("=" * 60)
+
+
+def edit_tc_interactively(tc_data: dict) -> dict:
+    """생성된 테스트케이스를 필드별로 검토하며, 원하는 필드만 골라 직접 수정."""
+    editable_fields = [
+        ("category", "카테고리"),
+        ("title", "테스트 제목"),
+        ("purpose", "테스트 목적"),
+        ("precondition", "사전 조건"),
+        ("input_value", "입력값"),
+        ("expected", "기대결과"),
+    ]
+
+    print("\n수정할 항목 번호를 입력하세요 (여러 개는 쉼표로, 예: 2,4)")
+    for i, (_, label) in enumerate(editable_fields, start=1):
+        print(f"  {i}. {label}")
+    print(f"  {len(editable_fields) + 1}. 테스트 절차 (여러 줄)")
+    print("  0. 수정 없이 그대로 진행")
+
+    raw = input("선택: ").strip()
+    if raw in ("", "0"):
+        return tc_data
+
+    steps_index = len(editable_fields) + 1
+    for part in raw.split(","):
+        part = part.strip()
+        if not part.isdigit():
+            continue
+        n = int(part)
+        if 1 <= n <= len(editable_fields):
+            key, label = editable_fields[n - 1]
+            current = tc_data.get(key, "")
+            new_value = input(f"{label} (현재: {current})\n새 값 입력 (그대로 두려면 Enter): ").strip()
+            if new_value:
+                tc_data[key] = new_value
+        elif n == steps_index:
+            print("테스트 절차를 새로 입력하세요 (한 줄에 하나씩, 끝나면 END):")
+            new_steps = []
+            while True:
+                line = input()
+                if line.strip().upper() == "END":
+                    break
+                if line.strip():
+                    new_steps.append(line.strip())
+            if new_steps:
+                tc_data["steps"] = new_steps
+
+    return tc_data
 
 
 def check_duplicates_and_warn(tc_data: dict) -> None:
@@ -121,6 +169,13 @@ def run_multi(bug_report: str) -> None:
 
     for i in selected_indices:
         tc_data = tc_list[i - 1]
+
+        edit_choice = input(f"\n[{i}] {tc_data.get('title')} - 수정할까요? (y/n): ").strip().lower()
+        if edit_choice == "y":
+            tc_data = edit_tc_interactively(tc_data)
+            preview(tc_data, index=i)
+            tc_list[i - 1] = tc_data
+
         try:
             tc_id = append_test_case(OUTPUT_FILE, tc_data["bug_id"], tc_data)
             print(f"저장 완료: [{i}] {tc_id} -> {OUTPUT_FILE}")
@@ -165,6 +220,11 @@ def run_once() -> None:
 
     preview(tc_data)
     check_duplicates_and_warn(tc_data)
+
+    edit_choice = input("\n내용을 수정할까요? (y/n): ").strip().lower()
+    if edit_choice == "y":
+        tc_data = edit_tc_interactively(tc_data)
+        preview(tc_data)
 
     confirm = input(f"\n'{OUTPUT_FILE}'에 저장할까요? (y/n): ").strip().lower()
     if confirm != "y":
