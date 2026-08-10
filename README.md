@@ -98,6 +98,9 @@ CLI와 GUI 모두 지원합니다.
 
 ### 4. 중복/유사 테스트케이스 경고
 
+<img width="934" height="848" alt="warning" src="https://github.com/user-attachments/assets/5d36426c-9687-4076-82c2-791cf9dbe1d0" />
+
+
 새 테스트케이스를 저장하기 전에 기존 `testcase.xlsx`의 테스트케이스와 제목/목적을 비교합니다.
 
 유사한 테스트케이스가 발견되면 저장 전에 경고합니다.
@@ -210,6 +213,9 @@ python main.py
 
 ## 3-1. 버그 리포트 → 테스트케이스
 
+<img width="921" height="827" alt="br2tc" src="https://github.com/user-attachments/assets/ea3295c9-1751-4da6-9e22-dbf5f53999cf" />
+
+
 ### Step 1. Yona 버그 리포트 입력
 
 Yona 버그 리포트 원문을 그대로 붙여넣습니다.
@@ -304,12 +310,12 @@ TC_298_03
 
 ---
 
-<img width="967" height="868" alt="tc2br" src="https://github.com/user-attachments/assets/0a605718-bfb5-4e19-9dce-7a57a7df6196" />
-
-
 # 3-2. 테스트케이스 → 버그 리포트
 
 실패한 테스트케이스를 기반으로 Yona 버그 리포트를 생성할 수 있습니다.
+
+<img width="967" height="868" alt="tc2br" src="https://github.com/user-attachments/assets/0a605718-bfb5-4e19-9dce-7a57a7df6196" />
+
 
 ### Step 1. 테스트케이스 입력
 
