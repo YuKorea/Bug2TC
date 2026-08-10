@@ -12,9 +12,11 @@ AI 기반 Test Case Generator - CLI 진입점 (V1)
 
 import sys
 import json
+import re
 
 from ai_client import generate_test_case, generate_test_cases_multi
-from excel_writer import append_test_case, COLUMNS
+from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
+from bug_report_generator import generate_bug_report_fields, format_bug_report
 from paths import get_desktop_path
 
 OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
@@ -56,6 +58,21 @@ def preview(tc_data: dict, index: int = None) -> None:
     print("=" * 60)
 
 
+def check_duplicates_and_warn(tc_data: dict) -> None:
+    """저장 전에 기존 Excel과 유사도를 비교해서, 비슷한 TC가 있으면 경고 출력."""
+    matches = find_similar_test_cases(
+        OUTPUT_FILE,
+        title=tc_data.get("title", ""),
+        purpose=tc_data.get("purpose", ""),
+    )
+    if not matches:
+        return
+    print("\n⚠️  유사한 기존 테스트케이스가 있습니다 (중복일 수 있어요):")
+    for m in matches[:3]:
+        pct = int(m["similarity"] * 100)
+        print(f"   - {m['tc_id']} [{m['category']}] {m['title']}  (유사도 {pct}%)")
+
+
 def _parse_selection(raw: str, max_index: int) -> list:
     """'1,3' / 'all' / '' 같은 입력을 실제 인덱스 리스트(1-based)로 변환."""
     raw = raw.strip().lower()
@@ -91,6 +108,7 @@ def run_multi(bug_report: str) -> None:
     print(f"\n총 {len(tc_list)}개의 시나리오를 찾았습니다.")
     for i, tc_data in enumerate(tc_list, start=1):
         preview(tc_data, index=i)
+        check_duplicates_and_warn(tc_data)
 
     selection_raw = input(
         f"\n저장할 번호를 입력하세요 (예: 1,3 / all=전체 / n=저장 안 함): "
@@ -146,6 +164,7 @@ def run_once() -> None:
         return
 
     preview(tc_data)
+    check_duplicates_and_warn(tc_data)
 
     confirm = input(f"\n'{OUTPUT_FILE}'에 저장할까요? (y/n): ").strip().lower()
     if confirm != "y":
@@ -161,13 +180,82 @@ def run_once() -> None:
         print(f"\n[저장 실패] {type(e).__name__}: {e}")
 
 
+def _sanitize_filename(text: str) -> str:
+    """파일명으로 못 쓰는 문자 제거/치환, 너무 길면 자름."""
+    text = re.sub(r'[\\/:*?"<>|]', "", text).strip()
+    text = re.sub(r"\s+", "_", text)
+    return text[:40] if text else "bugreport"
+
+
+def run_reverse() -> None:
+    """실패한 테스트케이스 + 실제 결과 + 버전 정보를 받아 버그 리포트로 변환."""
+    tc_text = read_multiline_input("\n실패한 테스트케이스 내용을 붙여넣으세요 (Excel 행 복사도 가능).")
+    if not tc_text.strip():
+        print("입력이 비어 있어 취소합니다.")
+        return
+
+    actual_result = input("\n실제 결과 (테스트 시 실제로 어떻게 나왔는지, 필수): ").strip()
+    if not actual_result:
+        print("실제 결과가 없으면 버그 리포트를 만들 수 없어 취소합니다.")
+        return
+
+    version = input("버전 정보 (예: v3.0.18.2, 필수): ").strip()
+    if not version:
+        print("버전 정보가 없으면 버그 리포트를 만들 수 없어 취소합니다.")
+        return
+
+    print("\n로컬 AI 모델 호출 중... (처음 실행이거나 CPU만 쓰는 경우 다소 걸릴 수 있어요)")
+    try:
+        fields = generate_bug_report_fields(tc_text)
+    except RuntimeError as e:
+        print(f"\n[설정 오류] {e}")
+        return
+    except ValueError as e:
+        print(f"\n[AI 응답 오류] {e}")
+        return
+    except Exception as e:
+        print(f"\n[예상치 못한 오류] {type(e).__name__}: {e}")
+        return
+
+    report = format_bug_report(fields, actual_result, version)
+
+    print("\n" + "=" * 60)
+    print("생성된 버그 리포트 (Yona에 그대로 붙여넣기 가능)")
+    print("=" * 60)
+    print(report)
+    print("=" * 60)
+
+    save = input("\n이 내용을 텍스트 파일로 저장할까요? (y/n): ").strip().lower()
+    if save != "y":
+        return
+
+    filename = f"bugreport_{_sanitize_filename(fields.get('title', ''))}.txt"
+    out_path = get_desktop_path() / filename
+    try:
+        out_path.write_text(report, encoding="utf-8")
+        print(f"\n저장 완료: {out_path}")
+    except Exception as e:
+        print(f"\n[저장 실패] {type(e).__name__}: {e}")
+
+
 def main() -> None:
     print("AI 기반 Test Case Generator (V1 - CLI)")
     print(f"저장 컬럼: {', '.join(COLUMNS)}")
 
     while True:
-        run_once()
-        again = input("\n다른 버그도 처리할까요? (y/n): ").strip().lower()
+        mode = input(
+            "\n무엇을 변환할까요?\n"
+            "  1) 버그 리포트 → 테스트케이스\n"
+            "  2) 테스트케이스 → 버그 리포트\n"
+            "선택 (1/2, 기본값 1): "
+        ).strip()
+
+        if mode == "2":
+            run_reverse()
+        else:
+            run_once()
+
+        again = input("\n계속 진행할까요? (y/n): ").strip().lower()
         if again != "y":
             break
 

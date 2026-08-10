@@ -9,6 +9,7 @@ AI 기반 Test Case Generator - Excel 저장 모듈
 """
 
 from pathlib import Path
+from difflib import SequenceMatcher
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -140,6 +141,56 @@ def append_test_case(path: str, bug_id: str, tc_data: dict) -> str:
         ) from e
 
     return tc_id
+
+
+def _similarity(a: str, b: str) -> float:
+    """0.0~1.0 사이 텍스트 유사도 (한글 포함 문자 단위 비교)."""
+    return SequenceMatcher(None, a or "", b or "").ratio()
+
+
+def find_similar_test_cases(path: str, title: str, purpose: str = "", threshold: float = 0.6) -> list:
+    """
+    기존 Excel에 이미 저장된 테스트케이스들과 title(+purpose)을 비교해서
+    유사도가 threshold 이상인 것들을 찾아 반환.
+
+    threshold: 0.6 = 문자 기준 60% 이상 비슷하면 후보로 봄 (완전 동일이 1.0)
+
+    반환: [{"tc_id", "category", "title", "similarity"}, ...] 유사도 내림차순.
+          파일이 없거나 비교 대상이 없으면 빈 리스트.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        return []
+
+    wb = load_workbook(path)
+    ws = wb["TestCases"] if "TestCases" in wb.sheetnames else wb.active
+
+    matches = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not row[0]:
+            continue
+        existing_tc_id = row[0]
+        existing_category = row[1] if len(row) > 1 else ""
+        existing_title = row[2] if len(row) > 2 else ""
+        existing_purpose = row[3] if len(row) > 3 else ""
+        if not existing_title:
+            continue
+
+        title_sim = _similarity(title, str(existing_title))
+        purpose_sim = _similarity(purpose, str(existing_purpose)) if purpose else 0.0
+        # 제목이 비슷하거나, 제목은 좀 다른데 목적(purpose)이 거의 같으면(재검증하는 관점 차이 등) 후보로 봄
+        combined = max(title_sim, purpose_sim)
+
+        if combined >= threshold:
+            matches.append({
+                "tc_id": existing_tc_id,
+                "category": existing_category,
+                "title": existing_title,
+                "similarity": round(combined, 2),
+            })
+
+    matches.sort(key=lambda m: m["similarity"], reverse=True)
+    return matches
 
 
 if __name__ == "__main__":

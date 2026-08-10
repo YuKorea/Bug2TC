@@ -38,11 +38,14 @@ RESPONSE_SCHEMA = {
         },
         "precondition": {
             "type": "string",
-            "description": "테스트 시작 전에 만족되어 있어야 하는 상태",
+            "description": "테스트 시작 전에 만족되어 있어야 하는 상태. 절대 빈 문자열로 두지 말 것. "
+                            "버그 리포트에 명시적으로 없으면 재현 스텝/맥락에서 합리적으로 추론해서 채우고, "
+                            "정말 해당하는 사전 조건이 없으면 '특별한 사전 조건 없음'이라고 명시적으로 씀.",
         },
         "input_value": {
             "type": "string",
-            "description": "실제로 입력하는 값 (구체적으로)",
+            "description": "실제로 입력하는 값 (구체적으로). 절대 빈 문자열로 두지 말 것. "
+                            "이 버그가 특정 입력값이 아니라 상태/UI 갱신 문제라면 '해당 없음'이라고 명시적으로 씀.",
         },
         "steps": {
             "type": "array",
@@ -60,7 +63,7 @@ RESPONSE_SCHEMA = {
     ],
 }
 
-SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
+SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 테스트케이스를 작성하는 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
@@ -69,10 +72,16 @@ Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 �
 2. expected는 버그 리포트의 '기대 결과'를 근거로 작성하되, 테스트가 통과/실패를 판단할 수 있도록 검증 가능한 문장으로 씁니다.
 3. 버그 리포트에 여러 개의 검증 포인트가 섞여 있으면(예: 케이스 A + 케이스 B), 이번 호출에서는 가장 핵심적인 시나리오 하나만 골라 하나의 테스트케이스로 작성합니다.
 4. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
-5. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
-6. 모든 필드는 한국어로 작성합니다."""
+5. precondition과 input_value는 절대 빈 문자열로 두지 않습니다.
+   - precondition: 버그 리포트에 명시적으로 없으면, 재현 스텝의 앞부분(첫 번째로 확인하는 스텝 전까지의 상태)이나
+     버그 설명의 맥락에서 합리적으로 추론해서 채웁니다. 예: "12.erwin 파일이 열려 있고 엔터티가 선택된 상태".
+     정말 해당하는 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
+   - input_value: 이 버그가 특정 텍스트/숫자 입력값을 검증하는 게 아니라 UI 상태나 화면 갱신 문제라면,
+     "해당 없음"이라고 명시적으로 씁니다. 빈 문자열로 남기지 않습니다.
+6. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
+7. 모든 필드는 한국어로 작성합니다."""
 
-MULTI_SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
+MULTI_SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 서로 다른 검증 시나리오를 모두 찾아내고,
 각 시나리오마다 하나씩 독립된 테스트케이스를 생성합니다.
 
@@ -84,8 +93,12 @@ Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 �
 4. steps는 실제 재현 가능한 조작 순서로 작성합니다.
 5. expected는 버그 리포트의 '기대 결과'를 근거로, 통과/실패를 판단할 수 있는 검증 가능한 문장으로 씁니다.
 6. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
-7. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
-8. 모든 필드는 한국어로 작성합니다."""
+7. precondition과 input_value는 절대 빈 문자열로 두지 않습니다.
+   - precondition: 버그 리포트에 명시적으로 없으면, 재현 스텝의 앞부분이나 버그 설명의 맥락에서 합리적으로 추론해서 채웁니다.
+     정말 해당하는 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
+   - input_value: 특정 입력값이 아니라 UI 상태/화면 갱신 문제라면 "해당 없음"이라고 명시적으로 씁니다.
+8. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
+9. 모든 필드는 한국어로 작성합니다."""
 
 MULTI_RESPONSE_SCHEMA = {
     "type": "object",
@@ -104,6 +117,15 @@ def _extract_bug_id(bug_report_text: str) -> str:
     """버그 리포트 제목 앞의 숫자(Yona 이슈 번호)를 추출. 못 찾으면 'NA' 반환."""
     match = re.search(r"\b(\d{2,6})\b", bug_report_text)
     return match.group(1) if match else "NA"
+
+
+def _fill_blank_fields(tc_data: dict) -> dict:
+    """모델이 프롬프트 지시를 놓쳐서 precondition/input_value를 빈 문자열로 남긴 경우를 위한 안전장치."""
+    if not tc_data.get("precondition", "").strip():
+        tc_data["precondition"] = "특별한 사전 조건 없음"
+    if not tc_data.get("input_value", "").strip():
+        tc_data["input_value"] = "해당 없음"
+    return tc_data
 
 
 def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
@@ -157,6 +179,7 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
     if missing:
         raise ValueError(f"응답에 필수 키가 빠져 있습니다: {missing}\n응답: {tc_data}")
 
+    tc_data = _fill_blank_fields(tc_data)
     tc_data["bug_id"] = _extract_bug_id(bug_report_text)
     return tc_data
 
@@ -220,6 +243,7 @@ def generate_test_cases_multi(bug_report_text: str) -> list:
             raise ValueError(
                 f"{i}번째 시나리오 응답에 필수 키가 빠져 있습니다: {missing}\n응답: {tc_data}"
             )
+        tc_data = _fill_blank_fields(tc_data)
         tc_data["bug_id"] = bug_id
         result.append(tc_data)
 
@@ -249,7 +273,7 @@ trim 결과가 빈값이면 저장 불가 처리되어야 함
 앞뒤 공백이 제거되지 않고 그대로 저장됨
 
 5.버전 정보
-v 0.0
+v 3.0.17.3
 """
     result = generate_test_case(sample_bug, scenario_hint="공백만 입력하는 케이스만")
     print(json.dumps(result, ensure_ascii=False, indent=2))
