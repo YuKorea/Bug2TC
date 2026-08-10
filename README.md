@@ -123,7 +123,7 @@ CLI와 GUI 모두 지원합니다.
 
 ### 4. 중복/유사 테스트케이스 경고
 
-<img width="934" height="848" alt="warning" src="https://github.com/user-attachments/assets/5d36426c-9687-4076-82c2-791cf9dbe1d0" />
+<img width="890" height="802" alt="warning" src="https://github.com/user-attachments/assets/4b595963-e446-4527-99ff-d7b3b6b9b471" />
 
 
 새 테스트케이스를 저장하기 전에 기존 `testcase.xlsx`의 테스트케이스와 제목/목적을 비교합니다.
