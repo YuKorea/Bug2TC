@@ -616,53 +616,6 @@ TCGenerator/
 
 ---
 
-# 11. 다른 사람에게 배포하기
-
-이 프로그램은 **완전히 로컬에서 실행되는 AI**를 사용합니다.
-
-따라서 `TCGenerator.exe` 하나만 전달한다고 바로 사용할 수 있는 것은 아닙니다.
-
-사용자 PC에 Ollama와 AI 모델이 먼저 설치되어 있어야 합니다.
-
-## 전달할 파일
-
-다음 파일을 전달합니다.
-
-```text
-TCGenerator.exe
-README.md
-```
-
------
-## .exe 파일 받는 사람이 최초 1회 해야 하는 작업
-
-### 1. Ollama 설치
-
-[Ollama 공식 홈페이지](https://ollama.com?utm_source=chatgpt.com)
-
-### 2. AI 모델 다운로드
-
-PowerShell에서:
-
-```powershell
-ollama pull qwen2.5:7b
-```
-
-모델 크기는 약 4~5GB입니다.
-
-### 3. 실행
-
-설치가 완료되면:
-
-```text
-TCGenerator.exe
-```
-
-를 더블클릭하여 실행합니다.
-
-Ollama가 백그라운드에서 실행 중이면 별도의 터미널 작업 없이 사용할 수 있습니다.
-
----
 
 # 권장 PC 사양
 
@@ -1515,35 +1468,6 @@ TCGenerator.exe
 README.md
 ```
 ----
-## One-Time Setup for the .exe file recipient
-
-### 1. Install Ollama
-
-[Ollama Official Website](https://ollama.com?utm_source=chatgpt.com)
-
-### 2. Download the AI Model
-
-Open PowerShell and run:
-
-```powershell
-ollama pull qwen2.5:7b
-```
-
-The model is approximately 4–5 GB.
-
-### 3. Run the Application
-
-After the setup is complete:
-
-```text
-TCGenerator.exe
-```
-
-can be launched by double-clicking it.
-
-As long as Ollama is running in the background, no terminal interaction is required.
-
----
 
 # Recommended System Requirements
 
