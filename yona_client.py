@@ -17,10 +17,20 @@ GET https://yona.cslee.co.kr/-_-api/v1/owners/{owner}/projects/{project}/issues/
 
 import os
 import re
+import sys
+from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+# PyInstaller onefile로 실행되면 임시 폴더에서 돌아가기 때문에,
+# load_dotenv()가 기본 방식(현재 작업 폴더 기준 탐색)으로는 .env를 못 찾는 경우가 있음.
+# exe 실행 파일이 있는 실제 위치를 기준으로 .env를 명시적으로 찾아서 로드.
+if getattr(sys, "frozen", False):
+    _base_dir = Path(sys.executable).parent  # exe(TCGenerator.exe)가 있는 폴더
+else:
+    _base_dir = Path(__file__).resolve().parent  # python main.py로 실행할 때는 소스 폴더
+
+load_dotenv(_base_dir / ".env")
 
 BASE_URL = "https://yona.cslee.co.kr"
 DEFAULT_OWNER = "tl-lab"

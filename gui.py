@@ -16,6 +16,7 @@ from tkinter import ttk, messagebox, filedialog
 from ai_client import generate_test_case
 from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
 from bug_report_generator import generate_bug_report_fields, format_bug_report
+from yona_client import fetch_issue, issue_to_bug_report_text
 from paths import get_desktop_path
 
 DEFAULT_OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
@@ -36,18 +37,22 @@ class TestCaseGeneratorApp:
 
         self.current_tc_data = None  # 탭1: 마지막 생성 시 bug_id 등 보관용
         self.current_bug_fields = None  # 탭2: 저장 파일명 생성용 (title 참조)
+        self.current_yona_text = None  # 탭3: 조회된 버그 리포트 텍스트 (탭1로 전달용)
         self.output_path = tk.StringVar(value=DEFAULT_OUTPUT_FILE)
 
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        tab1 = ttk.Frame(notebook, padding=10)
-        tab2 = ttk.Frame(notebook, padding=10)
-        notebook.add(tab1, text="버그 리포트 → 테스트케이스")
-        notebook.add(tab2, text="테스트케이스 → 버그 리포트")
+        tab1 = ttk.Frame(self.notebook, padding=10)
+        tab2 = ttk.Frame(self.notebook, padding=10)
+        tab3 = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(tab1, text="버그 리포트 → 테스트케이스")
+        self.notebook.add(tab2, text="테스트케이스 → 버그 리포트")
+        self.notebook.add(tab3, text="Yona 조회")
 
         self._build_forward_tab(tab1)
         self._build_reverse_tab(tab2)
+        self._build_yona_tab(tab3)
 
     # ==================================================================
     # 탭 1: 버그 리포트 -> 테스트케이스
@@ -63,7 +68,7 @@ class TestCaseGeneratorApp:
             side="left"
         )
 
-        ttk.Label(main, text="버그 리포트 (제목, 버그 설명, 재현 스텝, 기대 결과 등 통째로 붙여넣기)").pack(
+        ttk.Label(main, text="Yona 버그 리포트 (제목, 버그 설명, 재현 스텝, 기대 결과 등 통째로 붙여넣기)").pack(
             anchor="w"
         )
         self.bug_input = tk.Text(main, height=8, wrap="word")
@@ -363,6 +368,100 @@ class TestCaseGeneratorApp:
 
         self._set_status_reverse(f"저장 완료: {path}")
         messagebox.showinfo("저장 완료", f"파일이 저장되었습니다:\n{path}")
+
+    # ==================================================================
+    # 탭 3: Yona 조회
+    # ==================================================================
+    def _build_yona_tab(self, main):
+        ttk.Label(
+            main, text="버그 번호만 입력하면 Yona에서 자동으로 가져옵니다 (.env의 YONA_API_TOKEN 필요)"
+        ).pack(anchor="w", pady=(0, 8))
+
+        input_frame = ttk.Frame(main)
+        input_frame.pack(fill="x", pady=(0, 8))
+        ttk.Label(input_frame, text="버그 번호:").pack(side="left")
+        self.yona_issue_number = tk.StringVar()
+        ttk.Entry(input_frame, textvariable=self.yona_issue_number, width=15).pack(
+            side="left", padx=6
+        )
+        self.yona_fetch_btn = ttk.Button(
+            input_frame, text="조회", command=self._on_yona_fetch_clicked
+        )
+        self.yona_fetch_btn.pack(side="left")
+        self.yona_status_label = ttk.Label(input_frame, text="", foreground="#555555")
+        self.yona_status_label.pack(side="left", padx=12)
+
+        ttk.Label(main, text="조회 결과 미리보기").pack(anchor="w")
+        self.yona_preview = tk.Text(main, height=18, wrap="word", state="disabled", bg="#f7f7f7")
+        self.yona_preview.pack(fill="both", expand=True, pady=(2, 8))
+
+        self.yona_send_btn = ttk.Button(
+            main,
+            text="테스트케이스 생성 탭으로 보내기 →",
+            command=self._on_yona_send_clicked,
+            state="disabled",
+        )
+        self.yona_send_btn.pack(anchor="e")
+
+    def _on_yona_fetch_clicked(self):
+        issue_number = self.yona_issue_number.get().strip()
+        if not issue_number.isdigit():
+            messagebox.showwarning("입력 필요", "버그 번호는 숫자만 입력해주세요.")
+            return
+
+        self.yona_fetch_btn.config(state="disabled")
+        self.yona_send_btn.config(state="disabled")
+        self._set_status_yona("Yona에서 조회 중...")
+        self._yona_set_preview("")
+
+        thread = threading.Thread(
+            target=self._yona_fetch_worker, args=(issue_number,), daemon=True
+        )
+        thread.start()
+
+    def _yona_fetch_worker(self, issue_number: str):
+        try:
+            issue = fetch_issue(issue_number)
+        except RuntimeError as e:
+            self.root.after(0, self._on_yona_fetch_error, f"[조회 실패] {e}")
+            return
+        except Exception as e:
+            self.root.after(0, self._on_yona_fetch_error, f"[예상치 못한 오류] {type(e).__name__}: {e}")
+            return
+
+        bug_report_text = issue_to_bug_report_text(issue)
+        self.root.after(0, self._on_yona_fetch_success, issue, bug_report_text)
+
+    def _on_yona_fetch_success(self, issue: dict, bug_report_text: str):
+        self.current_yona_text = bug_report_text
+        self._set_status_yona(f"조회 완료: [{issue.get('number')}] {issue.get('title')}")
+        self._yona_set_preview(bug_report_text)
+        self.yona_fetch_btn.config(state="normal")
+        self.yona_send_btn.config(state="normal")
+
+    def _on_yona_fetch_error(self, message: str):
+        self._set_status_yona("조회 실패")
+        self._yona_set_preview(message)
+        self.yona_fetch_btn.config(state="normal")
+        messagebox.showerror("조회 실패", message)
+
+    def _on_yona_send_clicked(self):
+        text = getattr(self, "current_yona_text", None)
+        if not text:
+            return
+        self.bug_input.delete("1.0", "end")
+        self.bug_input.insert("1.0", text)
+        self.notebook.select(0)  # 탭1(버그->TC)로 자동 전환
+        self._set_status("Yona에서 가져온 내용이 입력되었습니다. '테스트 케이스 생성'을 눌러주세요.")
+
+    def _set_status_yona(self, text: str):
+        self.yona_status_label.config(text=text)
+
+    def _yona_set_preview(self, text: str):
+        self.yona_preview.config(state="normal")
+        self.yona_preview.delete("1.0", "end")
+        self.yona_preview.insert("1.0", text)
+        self.yona_preview.config(state="disabled")
 
     # ==================================================================
     # 공용 표시 헬퍼

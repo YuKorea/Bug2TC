@@ -3,7 +3,7 @@ main.py
 AI 기반 Test Case Generator - CLI 진입점 (V1)
 
 사용 흐름:
-1. 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
+1. Yona 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
 2. 로컬 AI(Ollama)가 테스트케이스로 변환
 3. 결과를 미리 보여주고, 저장할지 확인
 4. testcase.xlsx 에 한 행 추가
@@ -17,6 +17,7 @@ import re
 from ai_client import generate_test_case, generate_test_cases_multi
 from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
 from bug_report_generator import generate_bug_report_fields, format_bug_report
+from yona_client import fetch_issue, issue_to_bug_report_text
 from paths import get_desktop_path
 
 OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
@@ -185,8 +186,9 @@ def run_multi(bug_report: str) -> None:
             print(f"[저장 실패] [{i}] {type(e).__name__}: {e}")
 
 
-def run_once() -> None:
-    bug_report = read_multiline_input("\nYona 버그 리포트를 붙여넣으세요.")
+def run_once(bug_report: str = None) -> None:
+    if bug_report is None:
+        bug_report = read_multiline_input("\nYona 버그 리포트를 붙여넣으세요.")
     if not bug_report.strip():
         print("입력이 비어 있어 취소합니다.")
         return
@@ -298,6 +300,29 @@ def run_reverse() -> None:
         print(f"\n[저장 실패] {type(e).__name__}: {e}")
 
 
+def run_from_yona() -> None:
+    """버그 번호만 입력받아 Yona에서 직접 조회한 뒤, 기존 버그->TC 흐름으로 이어감."""
+    issue_number_raw = input("\n버그 번호를 입력하세요 (예: 298): ").strip()
+    if not issue_number_raw.isdigit():
+        print("숫자만 입력해주세요.")
+        return
+
+    print(f"\nYona에서 {issue_number_raw}번 이슈 조회 중...")
+    try:
+        issue = fetch_issue(issue_number_raw)
+    except RuntimeError as e:
+        print(f"\n[조회 실패] {e}")
+        return
+    except Exception as e:
+        print(f"\n[예상치 못한 오류] {type(e).__name__}: {e}")
+        return
+
+    print(f"조회 완료: [{issue.get('number')}] {issue.get('title')}")
+
+    bug_report = issue_to_bug_report_text(issue)
+    run_once(bug_report=bug_report)
+
+
 def main() -> None:
     print("AI 기반 Test Case Generator (V1 - CLI)")
     print(f"저장 컬럼: {', '.join(COLUMNS)}")
@@ -305,13 +330,16 @@ def main() -> None:
     while True:
         mode = input(
             "\n무엇을 변환할까요?\n"
-            "  1) 버그 리포트 → 테스트케이스\n"
+            "  1) 버그 리포트 → 테스트케이스 (직접 붙여넣기)\n"
             "  2) 테스트케이스 → 버그 리포트\n"
-            "선택 (1/2, 기본값 1): "
+            "  3) Yona 버그 번호로 조회 → 테스트케이스\n"
+            "선택 (1/2/3, 기본값 1): "
         ).strip()
 
         if mode == "2":
             run_reverse()
+        elif mode == "3":
+            run_from_yona()
         else:
             run_once()
 
