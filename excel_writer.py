@@ -1,13 +1,3 @@
-"""
-excel_writer.py
-AI 기반 Test Case Generator - Excel 저장 모듈
-
-담당 기능:
-- 테스트케이스 Excel 템플릿 생성 (헤더만 있는 빈 파일)
-- 기존 Excel 파일에 새 테스트케이스 행 추가 (append)
-- TC_ID 자동 채번 (같은 버그 번호 기준으로 -01, -02 ... 순번)
-"""
-
 from pathlib import Path
 from difflib import SequenceMatcher
 from openpyxl import Workbook, load_workbook

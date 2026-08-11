@@ -1,26 +1,21 @@
-"""
-ai_client.py
-AI 기반 Test Case Generator - Ollama(로컬 AI) 연동 모듈
-
-담당 기능:
-- Yona 버그 리포트 원문(텍스트)을 받아 로컬에서 돌아가는 Ollama 모델 호출
-- 우리 팀 테스트케이스 양식(7개 필드) JSON으로 변환해서 반환
-- 인터넷으로 아무 데이터도 나가지 않음 (완전 오프라인, 과금 없음)
-
-사전 준비 (한 번만):
-1) https://ollama.com 에서 Ollama 설치
-2) PowerShell에서: ollama pull qwen2.5:7b
-3) Ollama가 백그라운드에서 실행 중이어야 함 (설치하면 자동 실행됨)
-"""
-
+import os
 import re
 import json
 from ollama import Client
 
+from paths import get_config_dir
+from dotenv import load_dotenv
+
+_env_path = get_config_dir() / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path, override=True)
+
+
+PRODUCT_NAME = os.getenv("PRODUCT_NAME", "사내 제품")
+
 MODEL = "qwen2.5:7b"
 
-# Ollama의 Structured Outputs 기능용 JSON 스키마
-# (OpenAI와 달리 {"name":.., "schema":..} 로 감싸지 않고 스키마를 그대로 전달)
+
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -63,7 +58,7 @@ RESPONSE_SCHEMA = {
     ],
 }
 
-SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 테스트케이스를 작성하는 QA 엔지니어입니다.
+SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
@@ -74,14 +69,14 @@ Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 �
 4. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
 5. precondition과 input_value는 절대 빈 문자열로 두지 않습니다.
    - precondition: 버그 리포트에 명시적으로 없으면, 재현 스텝의 앞부분(첫 번째로 확인하는 스텝 전까지의 상태)이나
-     버그 설명의 맥락에서 합리적으로 추론해서 채웁니다. 예: "12.erwin 파일이 열려 있고 엔터티가 선택된 상태".
+     버그 설명의 맥락에서 합리적으로 추론해서 채웁니다. 예: "특정 프로젝트 파일이 열려 있고 대상 항목이 선택된 상태".
      정말 해당하는 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
    - input_value: 이 버그가 특정 텍스트/숫자 입력값을 검증하는 게 아니라 UI 상태나 화면 갱신 문제라면,
      "해당 없음"이라고 명시적으로 씁니다. 빈 문자열로 남기지 않습니다.
 6. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
 7. 모든 필드는 한국어로 작성합니다."""
 
-MULTI_SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유사)의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
+MULTI_SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 작성하는 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 서로 다른 검증 시나리오를 모두 찾아내고,
 각 시나리오마다 하나씩 독립된 테스트케이스를 생성합니다.
 

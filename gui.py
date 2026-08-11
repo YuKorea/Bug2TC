@@ -1,22 +1,21 @@
-"""
-gui.py
-AI 기반 Test Case Generator - Tkinter GUI (V2, 양방향 지원)
-
-탭 1: 버그 리포트 -> 테스트케이스 (Excel 저장)
-탭 2: 테스트케이스 -> 버그 리포트 (텍스트 파일 저장)
-
-실행: python gui.py
-"""
-
+import os
 import re
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 
 from ai_client import generate_test_case
 from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
 from bug_report_generator import generate_bug_report_fields, format_bug_report
-from yona_client import fetch_issue, issue_to_bug_report_text
+from yona_client import (
+    fetch_issue,
+    issue_to_bug_report_text,
+    has_token,
+    has_connection_settings,
+    save_token,
+    save_connection_settings,
+    get_env_path,
+)
 from paths import get_desktop_path
 
 DEFAULT_OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
@@ -373,8 +372,20 @@ class TestCaseGeneratorApp:
     # 탭 3: Yona 조회
     # ==================================================================
     def _build_yona_tab(self, main):
+        settings_frame = ttk.Frame(main)
+        settings_frame.pack(fill="x", pady=(0, 10))
+        self.yona_settings_status = ttk.Label(settings_frame, text="", foreground="#555555")
+        self.yona_settings_status.pack(side="left")
+        ttk.Button(
+            settings_frame, text="접속 설정", command=self._on_set_connection_clicked
+        ).pack(side="left", padx=(10, 4))
+        ttk.Button(
+            settings_frame, text="토큰 설정", command=self._on_set_token_clicked
+        ).pack(side="left")
+        self._refresh_yona_status()
+
         ttk.Label(
-            main, text="버그 번호만 입력하면 Yona에서 자동으로 가져옵니다 (.env의 YONA_API_TOKEN 필요)"
+            main, text="버그 번호만 입력하면 Yona에서 자동으로 가져옵니다"
         ).pack(anchor="w", pady=(0, 8))
 
         input_frame = ttk.Frame(main)
@@ -402,6 +413,71 @@ class TestCaseGeneratorApp:
             state="disabled",
         )
         self.yona_send_btn.pack(anchor="e")
+
+    def _refresh_yona_status(self):
+        if has_connection_settings():
+            self.yona_settings_status.config(text="설정 완료 ✓ (접속정보 + 토큰)", foreground="#2e7d32")
+        elif has_token():
+            self.yona_settings_status.config(text="토큰은 있음 — 접속 설정(도메인/프로젝트)이 필요해요", foreground="#c62828")
+        else:
+            self.yona_settings_status.config(text="접속 설정 + 토큰이 필요해요", foreground="#c62828")
+
+    def _on_set_connection_clicked(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Yona 접속 설정")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="회사/조직마다 다른 값이라, 이 PC에만 저장됩니다.").grid(
+            row=0, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="w"
+        )
+
+        ttk.Label(dialog, text="Yona 주소 (예: https://yona.example.com):").grid(
+            row=1, column=0, padx=10, pady=4, sticky="w"
+        )
+        base_url_var = tk.StringVar(value=os.getenv("YONA_BASE_URL", ""))
+        ttk.Entry(dialog, textvariable=base_url_var, width=40).grid(row=1, column=1, padx=10, pady=4)
+
+        ttk.Label(dialog, text="Owner (팀/조직 이름):").grid(row=2, column=0, padx=10, pady=4, sticky="w")
+        owner_var = tk.StringVar(value=os.getenv("YONA_OWNER", ""))
+        ttk.Entry(dialog, textvariable=owner_var, width=40).grid(row=2, column=1, padx=10, pady=4)
+
+        ttk.Label(dialog, text="Project (프로젝트 이름):").grid(row=3, column=0, padx=10, pady=4, sticky="w")
+        project_var = tk.StringVar(value=os.getenv("YONA_PROJECT", ""))
+        ttk.Entry(dialog, textvariable=project_var, width=40).grid(row=3, column=1, padx=10, pady=4)
+
+        def on_save():
+            try:
+                save_connection_settings(base_url_var.get(), owner_var.get(), project_var.get())
+            except Exception as e:
+                messagebox.showerror("저장 실패", f"{type(e).__name__}: {e}", parent=dialog)
+                return
+            self._refresh_yona_status()
+            dialog.destroy()
+            messagebox.showinfo("저장 완료", "접속 설정이 저장되었습니다. (재빌드해도 유지됩니다)")
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=(6, 10))
+        ttk.Button(btn_frame, text="저장", command=on_save).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="취소", command=dialog.destroy).pack(side="left", padx=4)
+
+    def _on_set_token_clicked(self):
+        token = simpledialog.askstring(
+            "Yona API Token 설정",
+            "Yona 계정 설정 > API Token 에서 발급받은 값을 입력하세요:\n"
+            f"(저장 위치: {get_env_path()})",
+            show="*",
+            parent=self.root,
+        )
+        if not token:
+            return
+        try:
+            save_token(token)
+        except Exception as e:
+            messagebox.showerror("저장 실패", f"{type(e).__name__}: {e}")
+            return
+        self._refresh_yona_status()
+        messagebox.showinfo("저장 완료", "토큰이 저장되었습니다. 이제 재빌드해도 유지됩니다.")
 
     def _on_yona_fetch_clicked(self):
         issue_number = self.yona_issue_number.get().strip()

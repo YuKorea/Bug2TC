@@ -1,15 +1,3 @@
-"""
-main.py
-AI 기반 Test Case Generator - CLI 진입점 (V1)
-
-사용 흐름:
-1. Yona 버그 리포트 원문을 터미널에 붙여넣는다 (마지막 줄에 END 입력)
-2. 로컬 AI(Ollama)가 테스트케이스로 변환
-3. 결과를 미리 보여주고, 저장할지 확인
-4. testcase.xlsx 에 한 행 추가
-5. 계속 반복할지 물어봄 (여러 버그를 연달아 처리 가능)
-"""
-
 import sys
 import json
 import re
@@ -17,7 +5,15 @@ import re
 from ai_client import generate_test_case, generate_test_cases_multi
 from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
 from bug_report_generator import generate_bug_report_fields, format_bug_report
-from yona_client import fetch_issue, issue_to_bug_report_text
+from yona_client import (
+    fetch_issue,
+    issue_to_bug_report_text,
+    has_token,
+    has_connection_settings,
+    save_token,
+    save_connection_settings,
+    get_env_path,
+)
 from paths import get_desktop_path
 
 OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
@@ -302,6 +298,35 @@ def run_reverse() -> None:
 
 def run_from_yona() -> None:
     """버그 번호만 입력받아 Yona에서 직접 조회한 뒤, 기존 버그->TC 흐름으로 이어감."""
+    if not has_connection_settings():
+        print(f"\nYona 접속 설정이 필요합니다. (저장 위치: {get_env_path()})")
+        print("(회사/조직마다 다른 값이라, 이 PC에만 저장되고 코드에는 들어가지 않습니다)")
+
+        base_url = input("Yona 주소 (예: https://yona.example.com): ").strip()
+        owner = input("Owner (팀/조직 이름): ").strip()
+        project = input("Project (프로젝트 이름): ").strip()
+        if not (base_url and owner and project):
+            print("입력이 비어 있어 취소합니다.")
+            return
+        try:
+            save_connection_settings(base_url, owner, project)
+        except Exception as e:
+            print(f"[접속 설정 저장 실패] {type(e).__name__}: {e}")
+            return
+        print("접속 설정이 저장되었습니다. (재빌드해도 유지됩니다)")
+
+    if not has_token():
+        token = input("\nYona API 토큰을 입력하세요: ").strip()
+        if not token:
+            print("토큰이 없어 조회를 진행할 수 없습니다.")
+            return
+        try:
+            save_token(token)
+        except Exception as e:
+            print(f"[토큰 저장 실패] {type(e).__name__}: {e}")
+            return
+        print("토큰이 저장되었습니다. (재빌드해도 유지됩니다)")
+
     issue_number_raw = input("\n버그 번호를 입력하세요 (예: 298): ").strip()
     if not issue_number_raw.isdigit():
         print("숫자만 입력해주세요.")

@@ -1,20 +1,16 @@
-"""
-bug_report_generator.py
-AI 기반 Test Case Generator - 역방향 변환 모듈 (테스트케이스 -> 버그 리포트)
-
-담당 기능:
-- 실패한 테스트케이스 내용 + 실제 결과 + 버전 정보를 받아서
-  Yona BTS 버그 리포트 양식에 맞는 텍스트를 생성
-
-주의:
-- '실제 결과'와 '버전 정보'는 테스트케이스 안에 없는 정보라서 AI가 지어낼 수 없음.
-  반드시 사용자가 직접 입력해야 함 (실제로 뭐가 잘못 나왔는지는 사람만 알 수 있음).
-- AI는 테스트케이스 내용을 바탕으로 제목/버그설명/발생위치/재현스텝/기대결과만 정리함.
-"""
-
+import os
 import re
 
 from ollama import Client
+
+from paths import get_config_dir
+from dotenv import load_dotenv
+
+_env_path = get_config_dir() / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path, override=True)
+
+PRODUCT_NAME = os.getenv("PRODUCT_NAME", "사내 제품")
 
 MODEL = "qwen2.5:7b"
 
@@ -46,7 +42,7 @@ RESPONSE_SCHEMA = {
     "required": ["title", "description", "location", "repro_steps", "expected"],
 }
 
-SYSTEM_PROMPT = """당신은 ERD 모델링 툴(erwin과 유시)의 테스트케이스를 분석해서 Yona BTS에 등록할
+SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 분석해서 Yona BTS에 등록할
 버그 리포트 초안을 작성하는 QA 엔지니어입니다.
 
 입력으로 받는 테스트케이스는 아래 컬럼으로 구성된 양식입니다:
