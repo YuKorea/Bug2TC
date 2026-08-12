@@ -1,11 +1,12 @@
+
 import os
 import re
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 
-from ai_client import generate_test_case
-from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
+from ai_client import generate_test_case, generate_regression_checklist
+from excel_writer import append_test_case, find_similar_test_cases, get_all_titles, COLUMNS
 from bug_report_generator import generate_bug_report_fields, format_bug_report
 from yona_client import (
     fetch_issue,
@@ -37,6 +38,9 @@ class TestCaseGeneratorApp:
         self.current_tc_data = None  # 탭1: 마지막 생성 시 bug_id 등 보관용
         self.current_bug_fields = None  # 탭2: 저장 파일명 생성용 (title 참조)
         self.current_yona_text = None  # 탭3: 조회된 버그 리포트 텍스트 (탭1로 전달용)
+        self.regression_checklist = []  # 탭4: 제안받은 회귀 시나리오 목록
+        self.regression_checkboxes = []  # 탭4: 체크박스 위젯들 (BooleanVar)
+        self.regression_bug_report = ""  # 탭4: 시나리오 생성 시 사용할 원본 버그 리포트
         self.output_path = tk.StringVar(value=DEFAULT_OUTPUT_FILE)
 
         self.notebook = ttk.Notebook(self.root)
@@ -45,13 +49,16 @@ class TestCaseGeneratorApp:
         tab1 = ttk.Frame(self.notebook, padding=10)
         tab2 = ttk.Frame(self.notebook, padding=10)
         tab3 = ttk.Frame(self.notebook, padding=10)
+        tab4 = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(tab1, text="버그 리포트 → 테스트케이스")
         self.notebook.add(tab2, text="테스트케이스 → 버그 리포트")
         self.notebook.add(tab3, text="Yona 조회")
+        self.notebook.add(tab4, text="회귀 테스트 세트")
 
         self._build_forward_tab(tab1)
         self._build_reverse_tab(tab2)
         self._build_yona_tab(tab3)
+        self._build_regression_tab(tab4)
 
     # ==================================================================
     # 탭 1: 버그 리포트 -> 테스트케이스
@@ -547,6 +554,174 @@ class TestCaseGeneratorApp:
 
     def _set_status_reverse(self, text: str):
         self.reverse_status_label.config(text=text)
+
+    # ==================================================================
+    # 탭 4: 회귀 테스트 세트
+    # ==================================================================
+    def _build_regression_tab(self, main):
+        ttk.Label(
+            main,
+            text="버그 리포트를 출발점으로, 같은 기능 영역에서 점검해야 할 회귀 테스트 시나리오를 폭넓게 제안받습니다.",
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.regression_input = tk.Text(main, height=8, wrap="word")
+        self.regression_input.pack(fill="both", expand=False, pady=(0, 8))
+
+        action_frame = ttk.Frame(main)
+        action_frame.pack(fill="x", pady=(0, 8))
+        self.regression_analyze_btn = ttk.Button(
+            action_frame, text="회귀 시나리오 분석", command=self._on_regression_analyze_clicked
+        )
+        self.regression_analyze_btn.pack(side="left")
+        self.regression_status = ttk.Label(action_frame, text="", foreground="#555555")
+        self.regression_status.pack(side="left", padx=12)
+
+        ttk.Label(main, text="제안된 시나리오 (원하는 것만 체크 후 생성)").pack(anchor="w")
+        checklist_container = ttk.Frame(main, relief="groove", borderwidth=1)
+        checklist_container.pack(fill="both", expand=True, pady=(2, 8))
+        self.regression_checklist_frame = ttk.Frame(checklist_container)
+        self.regression_checklist_frame.pack(fill="both", expand=True, padx=8, pady=8, anchor="nw")
+
+        self.regression_generate_btn = ttk.Button(
+            main,
+            text="선택한 항목 테스트케이스 생성 및 저장",
+            command=self._on_regression_generate_clicked,
+            state="disabled",
+        )
+        self.regression_generate_btn.pack(anchor="e", pady=(0, 8))
+
+        ttk.Label(main, text="처리 로그").pack(anchor="w")
+        self.regression_log = tk.Text(main, height=8, wrap="word", state="disabled", bg="#f7f7f7")
+        self.regression_log.pack(fill="both", expand=True)
+
+    def _on_regression_analyze_clicked(self):
+        bug_report = self.regression_input.get("1.0", "end").strip()
+        if not bug_report:
+            messagebox.showwarning("입력 필요", "버그 리포트를 붙여넣어 주세요.")
+            return
+
+        self.regression_bug_report = bug_report
+        self.regression_analyze_btn.config(state="disabled")
+        self.regression_generate_btn.config(state="disabled")
+        self._set_status_regression("기존 TC 확인 및 회귀 시나리오 분석 중...")
+        self._clear_regression_checklist()
+
+        thread = threading.Thread(target=self._regression_analyze_worker, args=(bug_report,), daemon=True)
+        thread.start()
+
+    def _regression_analyze_worker(self, bug_report: str):
+        path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
+        try:
+            existing_titles = get_all_titles(path)
+        except Exception:
+            existing_titles = []
+
+        try:
+            checklist = generate_regression_checklist(bug_report, existing_titles=existing_titles)
+        except RuntimeError as e:
+            self.root.after(0, self._on_regression_analyze_error, f"[설정 오류] {e}")
+            return
+        except ValueError as e:
+            self.root.after(0, self._on_regression_analyze_error, f"[AI 응답 오류] {e}")
+            return
+        except Exception as e:
+            self.root.after(0, self._on_regression_analyze_error, f"[예상치 못한 오류] {type(e).__name__}: {e}")
+            return
+
+        self.root.after(0, self._on_regression_analyze_success, checklist)
+
+    def _on_regression_analyze_success(self, checklist: list):
+        self.regression_checklist = checklist
+        self._set_status_regression(f"{len(checklist)}개 시나리오 제안됨")
+        self._render_regression_checklist(checklist)
+        self.regression_analyze_btn.config(state="normal")
+        self.regression_generate_btn.config(state="normal")
+
+    def _on_regression_analyze_error(self, message: str):
+        self._set_status_regression("분석 실패")
+        self.regression_analyze_btn.config(state="normal")
+        messagebox.showerror("분석 실패", message)
+
+    def _clear_regression_checklist(self):
+        for widget in self.regression_checklist_frame.winfo_children():
+            widget.destroy()
+        self.regression_checkboxes = []
+
+    def _render_regression_checklist(self, checklist: list):
+        self._clear_regression_checklist()
+        for item in checklist:
+            var = tk.BooleanVar(value=True)  # 기본은 전체 선택, 원치 않으면 체크 해제
+            cb = ttk.Checkbutton(self.regression_checklist_frame, text=item, variable=var)
+            cb.pack(anchor="w", pady=2)
+            self.regression_checkboxes.append((item, var))
+
+    def _on_regression_generate_clicked(self):
+        selected = [item for item, var in self.regression_checkboxes if var.get()]
+        if not selected:
+            messagebox.showwarning("선택 필요", "생성할 시나리오를 하나 이상 체크해주세요.")
+            return
+
+        self.regression_generate_btn.config(state="disabled")
+        self.regression_analyze_btn.config(state="disabled")
+        self._regression_log_clear()
+        self._regression_log_append(f"{len(selected)}개 항목 생성을 시작합니다...\n")
+
+        thread = threading.Thread(
+            target=self._regression_generate_worker, args=(selected,), daemon=True
+        )
+        thread.start()
+
+    def _regression_generate_worker(self, selected: list):
+        path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
+        for i, scenario in enumerate(selected, start=1):
+            self.root.after(0, self._regression_log_append, f"\n[{i}/{len(selected)}] '{scenario}' 생성 중...\n")
+            try:
+                tc_data = generate_test_case(self.regression_bug_report, scenario_hint=scenario)
+            except Exception as e:
+                self.root.after(0, self._regression_log_append, f"  [실패] {type(e).__name__}: {e}\n")
+                continue
+
+            try:
+                matches = find_similar_test_cases(
+                    path, title=tc_data.get("title", ""), purpose=tc_data.get("purpose", "")
+                )
+            except Exception:
+                matches = []
+            if matches:
+                top = matches[0]
+                pct = int(top["similarity"] * 100)
+                self.root.after(
+                    0, self._regression_log_append,
+                    f"  [주의] 유사한 기존 TC 있음: {top['tc_id']} (유사도 {pct}%) - 그래도 저장합니다.\n"
+                )
+
+            try:
+                tc_id = append_test_case(path, tc_data["bug_id"], tc_data)
+                self.root.after(0, self._regression_log_append, f"  [저장 완료] {tc_id}: {tc_data.get('title')}\n")
+            except Exception as e:
+                self.root.after(0, self._regression_log_append, f"  [저장 실패] {type(e).__name__}: {e}\n")
+
+        self.root.after(0, self._on_regression_generate_done)
+
+    def _on_regression_generate_done(self):
+        self._regression_log_append("\n전체 처리 완료.\n")
+        self._set_status_regression("생성/저장 완료")
+        self.regression_generate_btn.config(state="normal")
+        self.regression_analyze_btn.config(state="normal")
+
+    def _set_status_regression(self, text: str):
+        self.regression_status.config(text=text)
+
+    def _regression_log_clear(self):
+        self.regression_log.config(state="normal")
+        self.regression_log.delete("1.0", "end")
+        self.regression_log.config(state="disabled")
+
+    def _regression_log_append(self, text: str):
+        self.regression_log.config(state="normal")
+        self.regression_log.insert("end", text)
+        self.regression_log.see("end")
+        self.regression_log.config(state="disabled")
 
 
 def main():

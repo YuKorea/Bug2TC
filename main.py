@@ -1,9 +1,10 @@
+
 import sys
 import json
 import re
 
-from ai_client import generate_test_case, generate_test_cases_multi
-from excel_writer import append_test_case, find_similar_test_cases, COLUMNS
+from ai_client import generate_test_case, generate_test_cases_multi, generate_regression_checklist
+from excel_writer import append_test_case, find_similar_test_cases, get_all_titles, COLUMNS
 from bug_report_generator import generate_bug_report_fields, format_bug_report
 from yona_client import (
     fetch_issue,
@@ -348,23 +349,128 @@ def run_from_yona() -> None:
     run_once(bug_report=bug_report)
 
 
+def _get_bug_report_for_regression() -> str:
+    """회귀 테스트 세트의 출발점이 될 버그 리포트를 붙여넣기/Yona 조회 중 골라서 받아옴."""
+    source = input(
+        "\n버그 리포트를 어떻게 가져올까요?\n"
+        "  1) 직접 붙여넣기\n"
+        "  2) Yona 버그 번호로 조회\n"
+        "선택 (1/2, 기본값 1): "
+    ).strip()
+
+    if source == "2":
+        if not has_connection_settings() or not has_token():
+            print("\nYona 접속 설정이 안 되어 있습니다. 메뉴 3번(Yona 조회)에서 먼저 설정해주세요.")
+            return ""
+        issue_number_raw = input("버그 번호를 입력하세요 (예: 298): ").strip()
+        if not issue_number_raw.isdigit():
+            print("숫자만 입력해주세요.")
+            return ""
+        print(f"\nYona에서 {issue_number_raw}번 이슈 조회 중...")
+        try:
+            issue = fetch_issue(issue_number_raw)
+        except RuntimeError as e:
+            print(f"\n[조회 실패] {e}")
+            return ""
+        print(f"조회 완료: [{issue.get('number')}] {issue.get('title')}")
+        return issue_to_bug_report_text(issue)
+
+    return read_multiline_input("\n버그 리포트를 붙여넣으세요.")
+
+
+def run_regression() -> None:
+    """
+    버그 리포트를 출발점으로, 같은 기능 영역의 회귀 테스트 시나리오를 폭넓게 제안받고,
+    선택한 항목들을 실제 테스트케이스로 생성/저장.
+    """
+    bug_report = _get_bug_report_for_regression()
+    if not bug_report.strip():
+        print("입력이 비어 있어 취소합니다.")
+        return
+
+    existing_titles = get_all_titles(OUTPUT_FILE)
+    print(f"\n회귀 테스트 시나리오 분석 중... (기존 TC {len(existing_titles)}개와 중복 여부 확인)")
+    try:
+        checklist = generate_regression_checklist(bug_report, existing_titles=existing_titles)
+    except RuntimeError as e:
+        print(f"\n[설정 오류] {e}")
+        return
+    except ValueError as e:
+        print(f"\n[AI 응답 오류] {e}")
+        return
+    except Exception as e:
+        print(f"\n[예상치 못한 오류] {type(e).__name__}: {e}")
+        return
+
+    print(f"\n총 {len(checklist)}개의 회귀 테스트 시나리오를 제안받았습니다:\n")
+    for i, item in enumerate(checklist, start=1):
+        print(f"  ☐ [{i}] {item}")
+
+    selection_raw = input(
+        f"\n테스트케이스로 만들 항목을 선택하세요 (예: 1,3,5 / all=전체 / n=취소): "
+    ).strip()
+    selected_indices = _parse_selection(selection_raw, len(checklist))
+    if not selected_indices:
+        print("선택된 항목이 없어 취소합니다.")
+        return
+
+    for i in selected_indices:
+        scenario_hint = checklist[i - 1]
+        print(f"\n[{i}] '{scenario_hint}' 시나리오 생성 중...")
+        try:
+            tc_data = generate_test_case(bug_report, scenario_hint=scenario_hint)
+        except RuntimeError as e:
+            print(f"[생성 실패] {e}")
+            continue
+        except ValueError as e:
+            print(f"[AI 응답 오류] {e}")
+            continue
+        except Exception as e:
+            print(f"[예상치 못한 오류] {type(e).__name__}: {e}")
+            continue
+
+        preview(tc_data, index=i)
+        check_duplicates_and_warn(tc_data)
+
+        edit_choice = input(f"[{i}] 수정할까요? (y/n): ").strip().lower()
+        if edit_choice == "y":
+            tc_data = edit_tc_interactively(tc_data)
+            preview(tc_data, index=i)
+
+        save_choice = input(f"[{i}] 저장할까요? (y/n): ").strip().lower()
+        if save_choice != "y":
+            print(f"[{i}] 저장하지 않고 건너뜁니다.")
+            continue
+
+        try:
+            tc_id = append_test_case(OUTPUT_FILE, tc_data["bug_id"], tc_data)
+            print(f"[{i}] 저장 완료: {tc_id} -> {OUTPUT_FILE}")
+        except PermissionError as e:
+            print(f"[{i}] [저장 실패] {e}")
+        except Exception as e:
+            print(f"[{i}] [저장 실패] {type(e).__name__}: {e}")
+
+
 def main() -> None:
     print("AI 기반 Test Case Generator (V1 - CLI)")
     print(f"저장 컬럼: {', '.join(COLUMNS)}")
 
     while True:
         mode = input(
-            "\n무엇을 변환할까요?\n"
+            "\n무엇을 할까요?\n"
             "  1) 버그 리포트 → 테스트케이스 (직접 붙여넣기)\n"
             "  2) 테스트케이스 → 버그 리포트\n"
             "  3) Yona 버그 번호로 조회 → 테스트케이스\n"
-            "선택 (1/2/3, 기본값 1): "
+            "  4) 회귀 테스트 세트 생성 (관련 기능 전체 점검)\n"
+            "선택 (1/2/3/4, 기본값 1): "
         ).strip()
 
         if mode == "2":
             run_reverse()
         elif mode == "3":
             run_from_yona()
+        elif mode == "4":
+            run_regression()
         else:
             run_once()
 

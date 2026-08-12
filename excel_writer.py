@@ -1,3 +1,4 @@
+
 from pathlib import Path
 from difflib import SequenceMatcher
 from openpyxl import Workbook, load_workbook
@@ -79,17 +80,7 @@ def _next_tc_id(ws, bug_id: str) -> str:
 
 
 def append_test_case(path: str, bug_id: str, tc_data: dict) -> str:
-    """
-    AI가 생성한 테스트케이스 dict를 Excel에 한 행 추가.
 
-    tc_data 예상 키:
-        category, title, purpose, precondition, input_value,
-        steps (list[str] 권장, str도 허용), expected
-
-    '검토' / 'P/F' / '비고'는 QA가 직접 채우는 영역이라 빈 칸으로 남김.
-
-    반환값: 새로 채번된 TC_ID
-    """
     create_template(path)  # 파일이 없으면 생성
     wb = load_workbook(path)
     ws = wb["TestCases"] if "TestCases" in wb.sheetnames else wb.active
@@ -134,20 +125,12 @@ def append_test_case(path: str, bug_id: str, tc_data: dict) -> str:
 
 
 def _similarity(a: str, b: str) -> float:
-    """0.0~1.0 사이 텍스트 유사도 (한글 포함 문자 단위 비교)."""
+
     return SequenceMatcher(None, a or "", b or "").ratio()
 
 
 def find_similar_test_cases(path: str, title: str, purpose: str = "", threshold: float = 0.6) -> list:
-    """
-    기존 Excel에 이미 저장된 테스트케이스들과 title(+purpose)을 비교해서
-    유사도가 threshold 이상인 것들을 찾아 반환.
 
-    threshold: 0.6 = 문자 기준 60% 이상 비슷하면 후보로 봄 (완전 동일이 1.0)
-
-    반환: [{"tc_id", "category", "title", "similarity"}, ...] 유사도 내림차순.
-          파일이 없거나 비교 대상이 없으면 빈 리스트.
-    """
     file_path = Path(path)
     if not file_path.exists():
         return []
@@ -183,8 +166,28 @@ def find_similar_test_cases(path: str, title: str, purpose: str = "", threshold:
     return matches
 
 
+def get_all_titles(path: str) -> list:
+    """
+    기존 Excel에 저장된 모든 테스트케이스 제목 목록.
+    회귀 테스트 세트 생성 시, AI에게 '이미 있는 것과 중복 제안하지 마라'고
+    알려주는 용도로 사용.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        return []
+
+    wb = load_workbook(path)
+    ws = wb["TestCases"] if "TestCases" in wb.sheetnames else wb.active
+
+    titles = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row and len(row) > 2 and row[2]:
+            titles.append(str(row[2]))
+    return titles
+
+
 if __name__ == "__main__":
-    # AI 호출 없이 모듈 자체 동작만 확인하는 샘플 (298번 버그 기준)
+
     sample_path = "testcase_sample.xlsx"
     sample_tc = {
         "category": "도메인 관리",
@@ -203,7 +206,7 @@ if __name__ == "__main__":
     new_id = append_test_case(sample_path, "298", sample_tc)
     print(f"생성된 TC_ID: {new_id} -> {sample_path}")
 
-    # 중복 trim 케이스도 하나 더 추가해서 채번이 잘 되는지 확인
+
     sample_tc2 = {
         "category": "도메인 관리",
         "title": "앞뒤 공백 포함 도메인명 중복 등록 방지 확인",
