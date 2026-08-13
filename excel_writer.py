@@ -1,11 +1,11 @@
 
+
 from pathlib import Path
 from difflib import SequenceMatcher
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# 실제 사용 중인 템플릿 컬럼 순서 (고정)
 COLUMNS = [
     "TC_ID",
     "카테고리",
@@ -42,7 +42,7 @@ COLUMN_WIDTHS = {
 
 
 def create_template(path: str) -> None:
-    """헤더만 있는 새 테스트케이스 Excel 파일 생성. 이미 파일이 있으면 아무 것도 하지 않음."""
+
     file_path = Path(path)
     if file_path.exists():
         return
@@ -65,7 +65,7 @@ def create_template(path: str) -> None:
 
 
 def _next_tc_id(ws, bug_id: str) -> str:
-    """같은 bug_id 접두사를 가진 TC_ID 중 가장 큰 순번의 다음 번호 반환. 예: TC_298_01, TC_298_02 ..."""
+
     prefix = f"TC_{bug_id}_"
     max_seq = 0
     for row in ws.iter_rows(min_row=2, max_col=1, values_only=True):
@@ -125,8 +125,32 @@ def append_test_case(path: str, bug_id: str, tc_data: dict) -> str:
 
 
 def _similarity(a: str, b: str) -> float:
-
+    """0.0~1.0 사이 텍스트 유사도 (한글 포함 문자 단위 비교)."""
     return SequenceMatcher(None, a or "", b or "").ratio()
+
+
+def get_tc_summaries_for_bug(path: str, bug_id: str) -> list:
+
+    file_path = Path(path)
+    if not file_path.exists():
+        return []
+
+    wb = load_workbook(path)
+    ws = wb["TestCases"] if "TestCases" in wb.sheetnames else wb.active
+
+    prefix = f"TC_{bug_id}_"
+    summaries = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not row[0]:
+            continue
+        tc_id = str(row[0])
+        if not tc_id.startswith(prefix):
+            continue
+        title = row[2] if len(row) > 2 else ""
+        purpose = row[3] if len(row) > 3 else ""
+        summaries.append({"tc_id": tc_id, "title": title, "purpose": purpose})
+
+    return summaries
 
 
 def find_similar_test_cases(path: str, title: str, purpose: str = "", threshold: float = 0.6) -> list:
@@ -167,11 +191,7 @@ def find_similar_test_cases(path: str, title: str, purpose: str = "", threshold:
 
 
 def get_all_titles(path: str) -> list:
-    """
-    기존 Excel에 저장된 모든 테스트케이스 제목 목록.
-    회귀 테스트 세트 생성 시, AI에게 '이미 있는 것과 중복 제안하지 마라'고
-    알려주는 용도로 사용.
-    """
+
     file_path = Path(path)
     if not file_path.exists():
         return []
@@ -206,7 +226,7 @@ if __name__ == "__main__":
     new_id = append_test_case(sample_path, "298", sample_tc)
     print(f"생성된 TC_ID: {new_id} -> {sample_path}")
 
-
+    # 중복 trim 케이스도 하나 더 추가해서 채번이 잘 되는지 확인
     sample_tc2 = {
         "category": "도메인 관리",
         "title": "앞뒤 공백 포함 도메인명 중복 등록 방지 확인",

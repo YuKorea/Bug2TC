@@ -1,10 +1,19 @@
 
 import sys
-import json
 import re
 
-from ai_client import generate_test_case, generate_test_cases_multi, generate_regression_checklist
-from excel_writer import append_test_case, find_similar_test_cases, get_all_titles, COLUMNS
+from ai_client import (
+    generate_test_case,
+    generate_test_cases_multi,
+    analyze_bug_coverage,
+
+)
+from excel_writer import (
+    append_test_case,
+    find_similar_test_cases,
+    get_tc_summaries_for_bug,
+    COLUMNS,
+)
 from bug_report_generator import generate_bug_report_fields, format_bug_report
 from yona_client import (
     fetch_issue,
@@ -210,7 +219,7 @@ def run_once(bug_report: str = None) -> None:
         print(f"\n[설정 오류] {e}")
         return
     except ValueError as e:
-        # JSON 파싱 실패, 필수 키 누락 등 - AI 응답 자체가 이상한 경우
+
         print(f"\n[AI 응답 오류] {e}")
         return
     except Exception as e:
@@ -349,8 +358,8 @@ def run_from_yona() -> None:
     run_once(bug_report=bug_report)
 
 
-def _get_bug_report_for_regression() -> str:
-    """회귀 테스트 세트의 출발점이 될 버그 리포트를 붙여넣기/Yona 조회 중 골라서 받아옴."""
+def _get_bug_report_input() -> str:
+    """버그 리포트를 붙여넣기/Yona 조회 중 골라서 받아옴 (여러 메뉴에서 공용으로 사용)."""
     source = input(
         "\n버그 리포트를 어떻게 가져올까요?\n"
         "  1) 직접 붙여넣기\n"
@@ -378,20 +387,27 @@ def _get_bug_report_for_regression() -> str:
     return read_multiline_input("\n버그 리포트를 붙여넣으세요.")
 
 
-def run_regression() -> None:
+def run_coverage_analysis() -> None:
     """
-    버그 리포트를 출발점으로, 같은 기능 영역의 회귀 테스트 시나리오를 폭넓게 제안받고,
-    선택한 항목들을 실제 테스트케이스로 생성/저장.
+    버그 리포트에 실제로 적힌 검증 포인트들을 추출하고, 이미 그 버그로 작성된
+    TC들이 그 포인트를 빠짐없이 반영했는지 대조. (브레인스토밍이 아니라 텍스트 추출+대조)
     """
-    bug_report = _get_bug_report_for_regression()
+    bug_report = _get_bug_report_input()
     if not bug_report.strip():
         print("입력이 비어 있어 취소합니다.")
         return
 
-    existing_titles = get_all_titles(OUTPUT_FILE)
-    print(f"\n회귀 테스트 시나리오 분석 중... (기존 TC {len(existing_titles)}개와 중복 여부 확인)")
+    bug_id = re.search(r"\b(\d{2,6})\b", bug_report)
+    bug_id = bug_id.group(1) if bug_id else "NA"
+
+    existing_summaries = get_tc_summaries_for_bug(OUTPUT_FILE, bug_id) if bug_id != "NA" else []
+    if bug_id == "NA":
+        print("\n버그 번호를 찾지 못해, 기존 TC와 비교 없이 검증 포인트만 추출합니다.")
+    else:
+        print(f"\n버그 #{bug_id}에 대해 이미 작성된 TC {len(existing_summaries)}개와 대조합니다...")
+
     try:
-        checklist = generate_regression_checklist(bug_report, existing_titles=existing_titles)
+        points = analyze_bug_coverage(bug_report, existing_tc_summaries=existing_summaries)
     except RuntimeError as e:
         print(f"\n[설정 오류] {e}")
         return
@@ -402,21 +418,29 @@ def run_regression() -> None:
         print(f"\n[예상치 못한 오류] {type(e).__name__}: {e}")
         return
 
-    print(f"\n총 {len(checklist)}개의 회귀 테스트 시나리오를 제안받았습니다:\n")
-    for i, item in enumerate(checklist, start=1):
-        print(f"  ☐ [{i}] {item}")
+    covered = [p for p in points if p.get("covered")]
+    missing = [p for p in points if not p.get("covered")]
 
-    selection_raw = input(
-        f"\n테스트케이스로 만들 항목을 선택하세요 (예: 1,3,5 / all=전체 / n=취소): "
-    ).strip()
-    selected_indices = _parse_selection(selection_raw, len(checklist))
-    if not selected_indices:
-        print("선택된 항목이 없어 취소합니다.")
+    print(f"\n버그 검증 포인트 ({len(points)}건):\n")
+    for p in points:
+        mark = "☑" if p.get("covered") else "☐"
+        print(f"  {mark} {p.get('point')}")
+
+    if missing:
+        print(f"\n누락된 검증 포인트 {len(missing)}건 발견")
+    else:
+        print("\n모든 검증 포인트가 기존 TC에 반영되어 있습니다.")
+
+    if not missing:
         return
 
-    for i in selected_indices:
-        scenario_hint = checklist[i - 1]
-        print(f"\n[{i}] '{scenario_hint}' 시나리오 생성 중...")
+    gen_choice = input("\n누락된 항목을 테스트케이스로 만들까요? (y/n): ").strip().lower()
+    if gen_choice != "y":
+        return
+
+    for i, p in enumerate(missing, start=1):
+        scenario_hint = p.get("point")
+        print(f"\n[{i}] '{scenario_hint}' 생성 중...")
         try:
             tc_data = generate_test_case(bug_report, scenario_hint=scenario_hint)
         except RuntimeError as e:
@@ -461,7 +485,7 @@ def main() -> None:
             "  1) 버그 리포트 → 테스트케이스 (직접 붙여넣기)\n"
             "  2) 테스트케이스 → 버그 리포트\n"
             "  3) Yona 버그 번호로 조회 → 테스트케이스\n"
-            "  4) 회귀 테스트 세트 생성 (관련 기능 전체 점검)\n"
+            "  4) 테스트 시나리오 커버리지 분석 (버그 요구사항 vs 기존 TC 대조)\n"
             "선택 (1/2/3/4, 기본값 1): "
         ).strip()
 
@@ -470,7 +494,7 @@ def main() -> None:
         elif mode == "3":
             run_from_yona()
         elif mode == "4":
-            run_regression()
+            run_coverage_analysis()
         else:
             run_once()
 

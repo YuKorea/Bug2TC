@@ -1,3 +1,4 @@
+
 import os
 import re
 
@@ -43,7 +44,7 @@ RESPONSE_SCHEMA = {
 }
 
 SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 분석해서 Yona BTS에 등록할
-버그 리포트 초안을 작성하는 QA 엔지니어입니다.
+버그 리포트 초안을 작성하는 시니어 QA 엔지니어입니다.
 
 입력으로 받는 테스트케이스는 아래 컬럼으로 구성된 양식입니다:
 TC_ID, 카테고리, 테스트 제목, 테스트 목적, 사전 조건, 입력값, 테스트 절차, 기대결과, 검토, P/F, 비고
@@ -63,10 +64,7 @@ TC_ID, 카테고리, 테스트 제목, 테스트 목적, 사전 조건, 입력�
 
 
 def generate_bug_report_fields(tc_text: str) -> dict:
-    """
-    테스트케이스 원문(붙여넣은 텍스트, 탭/줄바꿈 등 형식 무관)을 받아
-    버그 리포트에 필요한 필드(title, description, location, repro_steps, expected)를 생성.
-    """
+
     client = Client()
 
     try:
@@ -105,15 +103,12 @@ def generate_bug_report_fields(tc_text: str) -> dict:
 
 
 def _strip_leading_number(text: str) -> str:
-    """모델이 스텝 텍스트 앞에 자체적으로 붙인 번호(예: '1. ', '2) ')를 제거."""
+
     return re.sub(r"^\s*\d+\s*[\.\)]\s*", "", text).strip()
 
 
 def format_bug_report(fields: dict, actual_result: str, version: str) -> str:
-    """
-    AI가 생성한 필드 + 사용자가 입력한 실제 결과/버전 정보를 합쳐서,
-    Yona에 그대로 붙여넣을 수 있는 최종 버그 리포트 텍스트를 만듦.
-    """
+
     steps = fields.get("repro_steps", [])
     cleaned_steps = [_strip_leading_number(s) for s in steps]
     steps_text = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(cleaned_steps))
@@ -133,6 +128,128 @@ def format_bug_report(fields: dict, actual_result: str, version: str) -> str:
 
 4.실제 결과
 {actual_result}
+
+5.버전 정보
+{version}
+"""
+
+
+
+FREEFORM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "버그 리포트 제목 (한 줄, 핵심만 간략하게)"},
+        "description": {"type": "string", "description": "버그 설명 (1~2문장, 문제 중심으로 간략하게)"},
+        "location": {"type": "string", "description": "발생 위치 (어떤 화면/기능에서 발생했는지)"},
+        "repro_steps": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "재현 스텝 (순서대로, 누구든 따라할 수 있게 구체적으로)",
+        },
+        "expected": {"type": "string", "description": "기대 결과"},
+        "actual": {
+            "type": "string",
+            "description": "실제 결과. 사용자 서술에 명시돼 있으면 그대로 정리하고, "
+                           "전혀 언급이 없으면 빈 문자열로 둡니다 (지어내지 않음).",
+        },
+        "version": {
+            "type": "string",
+            "description": "버전 정보. 사용자 서술에 명시돼 있으면 그대로, 없으면 빈 문자열로 둡니다.",
+        },
+    },
+    "required": ["title", "description", "location", "repro_steps", "expected", "actual", "version"],
+}
+
+FREEFORM_SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 시니어 QA 엔지니어입니다.
+사용자가 자유롭게 쓴 버그 설명(형식 없이 편하게 쓴 글)을 받아서, 아래 표준 양식에 맞는
+필드로 정리합니다.
+
+표준 양식: 제목 / 버그 설명 / 발생 위치·재현 스텝 / 기대 결과 / 실제 결과 / 버전 정보
+
+반드시 지켜야 할 규칙:
+1. 사용자가 실제로 쓴 내용만 재구성합니다. 없는 내용을 지어내거나 추측해서 채우지 않습니다.
+2. title은 "무엇이 문제인지" 한 줄로 요약합니다.
+3. description은 "어떤 기능이 정상 동작하지 않는다"는 식의 문제 중심 표현으로 1~2문장만 씁니다.
+4. location은 사용자 글에서 언급된 화면/기능을 근거로 씁니다. 언급이 없으면 빈 문자열로 둡니다.
+5. repro_steps는 사용자가 설명한 순서를 근거로, 번호 없이 각 단계만 순서대로 나열합니다.
+   사용자가 순서를 명확히 안 적었어도, 글의 흐름상 자연스러운 순서로 재구성하는 것은 괜찮습니다.
+6. expected/actual은 사용자가 "정상적으로는 ~해야 하는데" "실제로는 ~게 나온다"는 식으로
+   구분해서 썼으면 그대로 나누고, 구분 없이 문제 상황만 서술했다면 expected는 상식적으로
+   합리적인 수준까지만 재구성하고 actual은 사용자가 묘사한 증상을 그대로 정리합니다.
+   실제 결과 자체를 전혀 알 수 없는 경우에만 actual을 빈 문자열로 둡니다.
+7. version은 사용자가 버전을 언급했을 때만 채우고, 언급이 없으면 빈 문자열로 둡니다.
+8. 모든 필드는 한국어로 작성합니다."""
+
+
+def generate_bug_report_from_description(description_text: str) -> dict:
+    """
+    사용자가 자유롭게 쓴 버그 설명을 받아서, 표준 양식 필드로 정리.
+    반환: {"title","description","location","repro_steps","expected","actual","version"}
+    """
+    client = Client()
+
+    try:
+        response = client.chat(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": FREEFORM_SYSTEM_PROMPT},
+                {"role": "user", "content": f"[사용자가 쓴 버그 설명]\n{description_text}"},
+            ],
+            format=FREEFORM_SCHEMA,
+            options={"temperature": 0.2},
+        )
+    except Exception as e:
+        raise RuntimeError(
+            "Ollama에 연결할 수 없습니다. 다음을 확인해주세요:\n"
+            "1) Ollama가 설치되어 있고 백그라운드에서 실행 중인지\n"
+            f"2) 'ollama pull {MODEL}' 로 모델을 받아두었는지\n"
+            f"원본 오류: {type(e).__name__}: {e}"
+        ) from e
+
+    import json
+    raw_content = response.message.content
+    try:
+        fields = json.loads(raw_content)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"모델 응답을 JSON으로 파싱하지 못했습니다.\n원본 응답:\n{raw_content}"
+        ) from e
+
+    required_keys = {"title", "description", "location", "repro_steps", "expected", "actual", "version"}
+    missing = required_keys - fields.keys()
+    if missing:
+        raise ValueError(f"응답에 필수 키가 빠져 있습니다: {missing}\n응답: {fields}")
+
+    return fields
+
+
+def format_freeform_bug_report(fields: dict) -> str:
+    """
+    generate_bug_report_from_description() 결과를 최종 텍스트로 조립.
+    actual/version이 비어있으면 "(직접 입력 필요)"로 표시해서, 빠진 부분이 눈에 띄게 함.
+    """
+    steps = fields.get("repro_steps", [])
+    cleaned_steps = [_strip_leading_number(s) for s in steps]
+    steps_text = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(cleaned_steps))
+
+    actual = fields.get("actual", "").strip() or "(직접 입력 필요)"
+    version = fields.get("version", "").strip() or "(직접 입력 필요)"
+
+    return f"""제목: {fields.get('title', '')}
+
+1.버그 설명
+{fields.get('description', '')}
+
+2.발생 위치 / 재현 스텝
+발생 위치: {fields.get('location', '')}
+재현 스텝:
+{steps_text}
+
+3.기대 결과
+{fields.get('expected', '')}
+
+4.실제 결과
+{actual}
 
 5.버전 정보
 {version}

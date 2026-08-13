@@ -5,9 +5,14 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 
-from ai_client import generate_test_case, generate_regression_checklist
-from excel_writer import append_test_case, find_similar_test_cases, get_all_titles, COLUMNS
-from bug_report_generator import generate_bug_report_fields, format_bug_report
+from ai_client import generate_test_case, analyze_bug_coverage
+from excel_writer import append_test_case, find_similar_test_cases, get_tc_summaries_for_bug, COLUMNS
+from bug_report_generator import (
+    generate_bug_report_fields,
+    format_bug_report,
+    generate_bug_report_from_description,
+    format_freeform_bug_report,
+)
 from yona_client import (
     fetch_issue,
     issue_to_bug_report_text,
@@ -23,7 +28,7 @@ DEFAULT_OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
 
 
 def _sanitize_filename(text: str) -> str:
-    """파일명으로 못 쓰는 문자 제거/치환, 너무 길면 자름."""
+
     text = re.sub(r'[\\/:*?"<>|]', "", text).strip()
     text = re.sub(r"\s+", "_", text)
     return text[:40] if text else "bugreport"
@@ -35,30 +40,172 @@ class TestCaseGeneratorApp:
         self.root.title("AI 기반 Test Case Generator")
         self.root.geometry("900x780")
 
-        self.current_tc_data = None  # 탭1: 마지막 생성 시 bug_id 등 보관용
-        self.current_bug_fields = None  # 탭2: 저장 파일명 생성용 (title 참조)
-        self.current_yona_text = None  # 탭3: 조회된 버그 리포트 텍스트 (탭1로 전달용)
-        self.regression_checklist = []  # 탭4: 제안받은 회귀 시나리오 목록
-        self.regression_checkboxes = []  # 탭4: 체크박스 위젯들 (BooleanVar)
-        self.regression_bug_report = ""  # 탭4: 시나리오 생성 시 사용할 원본 버그 리포트
+        self.current_tc_data = None  # 버그->TC 탭: 마지막 생성 시 bug_id 등 보관용
+        self.current_bug_fields = None  # TC->버그 탭: 저장 파일명 생성용 (title 참조)
+        self.current_yona_text = None  # Yona조회 탭: 조회된 버그 리포트 텍스트 (다른 탭으로 전달용)
+        self.authored_report_fields = None  # 버그 작성 탭: 마지막으로 정리된 필드
+        self.coverage_points = []  # 커버리지 탭: 분석된 검증 포인트 목록
+        self.coverage_bug_report = ""  # 커버리지 탭: 커버리지 분석에 사용한 원본 버그 리포트
+        self.coverage_missing_queue = []  # 커버리지 탭: 아직 생성 안 한 누락 포인트들
+        self.coverage_current_point = None
+        self.coverage_current_bug_id = "NA"
         self.output_path = tk.StringVar(value=DEFAULT_OUTPUT_FILE)
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        tab1 = ttk.Frame(self.notebook, padding=10)
-        tab2 = ttk.Frame(self.notebook, padding=10)
-        tab3 = ttk.Frame(self.notebook, padding=10)
-        tab4 = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(tab1, text="버그 리포트 → 테스트케이스")
-        self.notebook.add(tab2, text="테스트케이스 → 버그 리포트")
-        self.notebook.add(tab3, text="Yona 조회")
-        self.notebook.add(tab4, text="회귀 테스트 세트")
+        # 탭 순서: Yona조회 / 버그 작성 -> (둘 다 "버그 리포트를 만드는 방법") -> 버그->TC -> TC->버그 -> 커버리지
+        tab_yona = ttk.Frame(self.notebook, padding=10)
+        tab_author = ttk.Frame(self.notebook, padding=10)
+        tab_forward = ttk.Frame(self.notebook, padding=10)
+        tab_reverse = ttk.Frame(self.notebook, padding=10)
+        tab_coverage = ttk.Frame(self.notebook, padding=10)
 
-        self._build_forward_tab(tab1)
-        self._build_reverse_tab(tab2)
-        self._build_yona_tab(tab3)
-        self._build_regression_tab(tab4)
+        self.TAB_YONA = 0
+        self.TAB_AUTHOR = 1
+        self.TAB_FORWARD = 2
+        self.TAB_REVERSE = 3
+        self.TAB_COVERAGE = 4
+
+        self.notebook.add(tab_yona, text="Yona 조회")
+        self.notebook.add(tab_author, text="버그 리포트 작성")
+        self.notebook.add(tab_forward, text="버그 리포트 → 테스트케이스")
+        self.notebook.add(tab_reverse, text="테스트케이스 → 버그 리포트")
+        self.notebook.add(tab_coverage, text="커버리지 분석")
+
+        self._build_yona_tab(tab_yona)
+        self._build_author_tab(tab_author)
+        self._build_forward_tab(tab_forward)
+        self._build_reverse_tab(tab_reverse)
+        self._build_coverage_tab(tab_coverage)
+
+    # ==================================================================
+    # 탭: 버그 리포트 작성 (자유 서술 -> 표준 양식)
+    # ==================================================================
+    def _build_author_tab(self, main):
+        ttk.Label(
+            main,
+            text="버그를 편하게 서술하면, 아래 표준 양식(제목/버그설명/재현스텝/기대결과/실제결과/버전정보)으로 정리해드립니다.",
+        ).pack(anchor="w", pady=(0, 8))
+
+        self.author_input = tk.Text(main, height=10, wrap="word")
+        self.author_input.pack(fill="both", expand=False, pady=(0, 8))
+
+        action_frame = ttk.Frame(main)
+        action_frame.pack(fill="x", pady=(0, 8))
+        self.author_generate_btn = ttk.Button(
+            action_frame, text="양식으로 정리", command=self._on_author_generate_clicked
+        )
+        self.author_generate_btn.pack(side="left")
+        self.author_status = ttk.Label(action_frame, text="", foreground="#555555")
+        self.author_status.pack(side="left", padx=12)
+
+        ttk.Label(main, text="정리된 버그 리포트 (직접 수정 후 사용 가능)").pack(anchor="w")
+        self.author_preview = tk.Text(main, height=16, wrap="word")
+        self.author_preview.pack(fill="both", expand=True, pady=(2, 8))
+
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill="x")
+        self.author_save_btn = ttk.Button(
+            btn_frame, text="텍스트 파일로 저장", command=self._on_author_save_clicked, state="disabled"
+        )
+        self.author_save_btn.pack(side="right", padx=(6, 0))
+        self.author_send_btn = ttk.Button(
+            btn_frame,
+            text="테스트케이스 생성 탭으로 보내기 →",
+            command=self._on_author_send_clicked,
+            state="disabled",
+        )
+        self.author_send_btn.pack(side="right")
+
+    def _on_author_generate_clicked(self):
+        description = self.author_input.get("1.0", "end").strip()
+        if not description:
+            messagebox.showwarning("입력 필요", "버그 설명을 입력해주세요.")
+            return
+
+        self.author_generate_btn.config(state="disabled")
+        self.author_save_btn.config(state="disabled")
+        self.author_send_btn.config(state="disabled")
+        self._set_status_author("로컬 AI 모델 호출 중...")
+        self.author_preview.delete("1.0", "end")
+
+        thread = threading.Thread(target=self._author_generate_worker, args=(description,), daemon=True)
+        thread.start()
+
+    def _author_generate_worker(self, description: str):
+        try:
+            fields = generate_bug_report_from_description(description)
+        except RuntimeError as e:
+            self.root.after(0, self._on_author_error, f"[설정 오류] {e}")
+            return
+        except ValueError as e:
+            self.root.after(0, self._on_author_error, f"[AI 응답 오류] {e}")
+            return
+        except Exception as e:
+            self.root.after(0, self._on_author_error, f"[예상치 못한 오류] {type(e).__name__}: {e}")
+            return
+
+        report = format_freeform_bug_report(fields)
+        self.root.after(0, self._on_author_success, fields, report)
+
+    def _on_author_success(self, fields: dict, report: str):
+        self.authored_report_fields = fields
+        self._set_status_author("정리 완료. 필요하면 직접 수정한 뒤 사용하세요.")
+        self.author_preview.delete("1.0", "end")
+        self.author_preview.insert("1.0", report)
+        self.author_generate_btn.config(state="normal")
+        self.author_save_btn.config(state="normal")
+        self.author_send_btn.config(state="normal")
+
+        if "(직접 입력 필요)" in report:
+            messagebox.showinfo(
+                "일부 항목 입력 필요",
+                "실제 결과 또는 버전 정보가 서술에 없어서 비워뒀어요. "
+                "미리보기에서 '(직접 입력 필요)' 부분을 채워주세요.",
+            )
+
+    def _on_author_error(self, message: str):
+        self._set_status_author("정리 실패")
+        self.author_preview.delete("1.0", "end")
+        self.author_preview.insert("1.0", message)
+        self.author_generate_btn.config(state="normal")
+        messagebox.showerror("정리 실패", message)
+
+    def _on_author_send_clicked(self):
+        text = self.author_preview.get("1.0", "end").strip()
+        if not text:
+            return
+        self.bug_input.delete("1.0", "end")
+        self.bug_input.insert("1.0", text)
+        self.notebook.select(self.TAB_FORWARD)
+        self._set_status("버그 리포트 작성 탭에서 가져온 내용이 입력되었습니다. '테스트 케이스 생성'을 눌러주세요.")
+
+    def _on_author_save_clicked(self):
+        text = self.author_preview.get("1.0", "end").strip()
+        if not text:
+            return
+        title_for_filename = self.authored_report_fields.get("title", "") if self.authored_report_fields else ""
+        default_name = f"bugreport_{_sanitize_filename(title_for_filename)}.txt"
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("텍스트 파일", "*.txt")],
+            initialfile=default_name,
+            initialdir=str(get_desktop_path()),
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+        except Exception as e:
+            messagebox.showerror("저장 실패", f"{type(e).__name__}: {e}")
+            return
+        self._set_status_author(f"저장 완료: {path}")
+        messagebox.showinfo("저장 완료", f"파일이 저장되었습니다:\n{path}")
+
+    def _set_status_author(self, text: str):
+        self.author_status.config(text=text)
 
     # ==================================================================
     # 탭 1: 버그 리포트 -> 테스트케이스
@@ -413,13 +560,22 @@ class TestCaseGeneratorApp:
         self.yona_preview = tk.Text(main, height=18, wrap="word", state="disabled", bg="#f7f7f7")
         self.yona_preview.pack(fill="both", expand=True, pady=(2, 8))
 
+        send_frame = ttk.Frame(main)
+        send_frame.pack(fill="x")
         self.yona_send_btn = ttk.Button(
-            main,
+            send_frame,
             text="테스트케이스 생성 탭으로 보내기 →",
             command=self._on_yona_send_clicked,
             state="disabled",
         )
-        self.yona_send_btn.pack(anchor="e")
+        self.yona_send_btn.pack(side="right", padx=(6, 0))
+        self.yona_send_coverage_btn = ttk.Button(
+            send_frame,
+            text="커버리지 분석 탭으로 보내기 →",
+            command=self._on_yona_send_to_coverage_clicked,
+            state="disabled",
+        )
+        self.yona_send_coverage_btn.pack(side="right")
 
     def _refresh_yona_status(self):
         if has_connection_settings():
@@ -494,6 +650,7 @@ class TestCaseGeneratorApp:
 
         self.yona_fetch_btn.config(state="disabled")
         self.yona_send_btn.config(state="disabled")
+        self.yona_send_coverage_btn.config(state="disabled")
         self._set_status_yona("Yona에서 조회 중...")
         self._yona_set_preview("")
 
@@ -521,6 +678,7 @@ class TestCaseGeneratorApp:
         self._yona_set_preview(bug_report_text)
         self.yona_fetch_btn.config(state="normal")
         self.yona_send_btn.config(state="normal")
+        self.yona_send_coverage_btn.config(state="normal")
 
     def _on_yona_fetch_error(self, message: str):
         self._set_status_yona("조회 실패")
@@ -534,8 +692,15 @@ class TestCaseGeneratorApp:
             return
         self.bug_input.delete("1.0", "end")
         self.bug_input.insert("1.0", text)
-        self.notebook.select(0)  # 탭1(버그->TC)로 자동 전환
+        self.notebook.select(self.TAB_FORWARD)
         self._set_status("Yona에서 가져온 내용이 입력되었습니다. '테스트 케이스 생성'을 눌러주세요.")
+
+    def _on_yona_send_to_coverage_clicked(self):
+        text = getattr(self, "current_yona_text", None)
+        if not text:
+            return
+        self.receive_bug_report_for_coverage(text)
+        self.notebook.select(self.TAB_COVERAGE)
 
     def _set_status_yona(self, text: str):
         self.yona_status_label.config(text=text)
@@ -556,173 +721,258 @@ class TestCaseGeneratorApp:
         self.reverse_status_label.config(text=text)
 
     # ==================================================================
-    # 탭 4: 회귀 테스트 세트
+    # 탭 4: 테스트 시나리오 커버리지 분석
     # ==================================================================
-    def _build_regression_tab(self, main):
+    def _build_coverage_tab(self, main):
         ttk.Label(
             main,
-            text="버그 리포트를 출발점으로, 같은 기능 영역에서 점검해야 할 회귀 테스트 시나리오를 폭넓게 제안받습니다.",
+            text="버그 리포트에 실제로 적힌 검증 포인트를 뽑아서, 이미 작성된 TC가 그걸 빠짐없이 반영했는지 대조합니다.",
         ).pack(anchor="w", pady=(0, 8))
 
-        self.regression_input = tk.Text(main, height=8, wrap="word")
-        self.regression_input.pack(fill="both", expand=False, pady=(0, 8))
+        self.coverage_input = tk.Text(main, height=8, wrap="word")
+        self.coverage_input.pack(fill="both", expand=False, pady=(0, 8))
 
         action_frame = ttk.Frame(main)
         action_frame.pack(fill="x", pady=(0, 8))
-        self.regression_analyze_btn = ttk.Button(
-            action_frame, text="회귀 시나리오 분석", command=self._on_regression_analyze_clicked
+        self.coverage_analyze_btn = ttk.Button(
+            action_frame, text="커버리지 분석", command=self._on_coverage_analyze_clicked
         )
-        self.regression_analyze_btn.pack(side="left")
-        self.regression_status = ttk.Label(action_frame, text="", foreground="#555555")
-        self.regression_status.pack(side="left", padx=12)
+        self.coverage_analyze_btn.pack(side="left")
+        self.coverage_status = ttk.Label(action_frame, text="", foreground="#555555")
+        self.coverage_status.pack(side="left", padx=12)
 
-        ttk.Label(main, text="제안된 시나리오 (원하는 것만 체크 후 생성)").pack(anchor="w")
+        ttk.Label(main, text="버그 검증 포인트").pack(anchor="w")
         checklist_container = ttk.Frame(main, relief="groove", borderwidth=1)
-        checklist_container.pack(fill="both", expand=True, pady=(2, 8))
-        self.regression_checklist_frame = ttk.Frame(checklist_container)
-        self.regression_checklist_frame.pack(fill="both", expand=True, padx=8, pady=8, anchor="nw")
+        checklist_container.pack(fill="x", pady=(2, 8))
+        self.coverage_checklist_frame = ttk.Frame(checklist_container)
+        self.coverage_checklist_frame.pack(fill="both", expand=True, padx=8, pady=8, anchor="nw")
 
-        self.regression_generate_btn = ttk.Button(
-            main,
-            text="선택한 항목 테스트케이스 생성 및 저장",
-            command=self._on_regression_generate_clicked,
+        queue_frame = ttk.Frame(main)
+        queue_frame.pack(fill="x", pady=(0, 8))
+        self.coverage_gen_btn = ttk.Button(
+            queue_frame, text="다음 누락 항목 생성 →", command=self._on_coverage_gen_next_clicked,
             state="disabled",
         )
-        self.regression_generate_btn.pack(anchor="e", pady=(0, 8))
+        self.coverage_gen_btn.pack(side="left")
+        self.coverage_progress_label = ttk.Label(queue_frame, text="", foreground="#555555")
+        self.coverage_progress_label.pack(side="left", padx=12)
 
-        ttk.Label(main, text="처리 로그").pack(anchor="w")
-        self.regression_log = tk.Text(main, height=8, wrap="word", state="disabled", bg="#f7f7f7")
-        self.regression_log.pack(fill="both", expand=True)
+        form = ttk.LabelFrame(main, text="생성된 테스트케이스 (직접 수정 후 저장 가능)")
+        form.pack(fill="both", expand=True, pady=(4, 8))
 
-    def _on_regression_analyze_clicked(self):
-        bug_report = self.regression_input.get("1.0", "end").strip()
+        row1 = ttk.Frame(form)
+        row1.pack(fill="x", padx=6, pady=(6, 4))
+        ttk.Label(row1, text="카테고리:").pack(side="left")
+        self.cov_field_category = tk.StringVar()
+        ttk.Entry(row1, textvariable=self.cov_field_category, width=20).pack(side="left", padx=(4, 16))
+        ttk.Label(row1, text="테스트 제목:").pack(side="left")
+        self.cov_field_title = tk.StringVar()
+        ttk.Entry(row1, textvariable=self.cov_field_title, width=40).pack(side="left", padx=4)
+
+        self.cov_field_purpose = self._add_field_row(form, "테스트 목적:", height=2)
+        self.cov_field_precondition = self._add_field_row(form, "사전 조건:", height=2)
+        self.cov_field_input_value = self._add_field_row(form, "입력값:", height=2)
+        self.cov_field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=4)
+        self.cov_field_expected = self._add_field_row(form, "기대결과:", height=2)
+
+        self.coverage_save_btn = ttk.Button(
+            main, text="이 항목 저장", command=self._on_coverage_save_clicked, state="disabled"
+        )
+        self.coverage_save_btn.pack(anchor="e")
+
+    def _on_coverage_analyze_clicked(self):
+        bug_report = self.coverage_input.get("1.0", "end").strip()
         if not bug_report:
             messagebox.showwarning("입력 필요", "버그 리포트를 붙여넣어 주세요.")
             return
 
-        self.regression_bug_report = bug_report
-        self.regression_analyze_btn.config(state="disabled")
-        self.regression_generate_btn.config(state="disabled")
-        self._set_status_regression("기존 TC 확인 및 회귀 시나리오 분석 중...")
-        self._clear_regression_checklist()
+        self.coverage_bug_report = bug_report
+        self.coverage_analyze_btn.config(state="disabled")
+        self.coverage_gen_btn.config(state="disabled")
+        self.coverage_save_btn.config(state="disabled")
+        self.coverage_missing_queue = []
+        self._set_status_coverage("기존 TC 확인 및 검증 포인트 분석 중...")
+        self._clear_coverage_checklist()
+        self._clear_coverage_form()
 
-        thread = threading.Thread(target=self._regression_analyze_worker, args=(bug_report,), daemon=True)
+        thread = threading.Thread(target=self._coverage_analyze_worker, args=(bug_report,), daemon=True)
         thread.start()
 
-    def _regression_analyze_worker(self, bug_report: str):
+    def _coverage_analyze_worker(self, bug_report: str):
+        bug_id_match = re.search(r"\b(\d{2,6})\b", bug_report)
+        bug_id = bug_id_match.group(1) if bug_id_match else "NA"
+
         path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
         try:
-            existing_titles = get_all_titles(path)
+            existing_summaries = get_tc_summaries_for_bug(path, bug_id) if bug_id != "NA" else []
         except Exception:
-            existing_titles = []
+            existing_summaries = []
 
         try:
-            checklist = generate_regression_checklist(bug_report, existing_titles=existing_titles)
+            points = analyze_bug_coverage(bug_report, existing_tc_summaries=existing_summaries)
         except RuntimeError as e:
-            self.root.after(0, self._on_regression_analyze_error, f"[설정 오류] {e}")
+            self.root.after(0, self._on_coverage_analyze_error, f"[설정 오류] {e}")
             return
         except ValueError as e:
-            self.root.after(0, self._on_regression_analyze_error, f"[AI 응답 오류] {e}")
+            self.root.after(0, self._on_coverage_analyze_error, f"[AI 응답 오류] {e}")
             return
         except Exception as e:
-            self.root.after(0, self._on_regression_analyze_error, f"[예상치 못한 오류] {type(e).__name__}: {e}")
+            self.root.after(0, self._on_coverage_analyze_error, f"[예상치 못한 오류] {type(e).__name__}: {e}")
             return
 
-        self.root.after(0, self._on_regression_analyze_success, checklist)
+        self.root.after(0, self._on_coverage_analyze_success, points, bug_id, len(existing_summaries))
 
-    def _on_regression_analyze_success(self, checklist: list):
-        self.regression_checklist = checklist
-        self._set_status_regression(f"{len(checklist)}개 시나리오 제안됨")
-        self._render_regression_checklist(checklist)
-        self.regression_analyze_btn.config(state="normal")
-        self.regression_generate_btn.config(state="normal")
+    def _on_coverage_analyze_success(self, points: list, bug_id: str, existing_count: int):
+        self.coverage_points = points
+        missing = [p for p in points if not p.get("covered")]
+        if bug_id == "NA":
+            self._set_status_coverage(f"버그 번호를 못 찾음 - 기존 TC 비교 없이 분석함 (총 {len(points)}건)")
+        else:
+            self._set_status_coverage(
+                f"버그 #{bug_id} 기존 TC {existing_count}개와 대조 완료 - 누락 {len(missing)}건 발견"
+            )
+        self._render_coverage_checklist(points)
+        self.coverage_analyze_btn.config(state="normal")
 
-    def _on_regression_analyze_error(self, message: str):
-        self._set_status_regression("분석 실패")
-        self.regression_analyze_btn.config(state="normal")
+        self.coverage_missing_queue = list(missing)
+        self.coverage_gen_btn.config(
+            state="normal" if self.coverage_missing_queue else "disabled",
+            text="다음 누락 항목 생성 →" if self.coverage_missing_queue else "누락된 항목 없음",
+        )
+
+    def _on_coverage_analyze_error(self, message: str):
+        self._set_status_coverage("분석 실패")
+        self.coverage_analyze_btn.config(state="normal")
         messagebox.showerror("분석 실패", message)
 
-    def _clear_regression_checklist(self):
-        for widget in self.regression_checklist_frame.winfo_children():
+    def _clear_coverage_checklist(self):
+        for widget in self.coverage_checklist_frame.winfo_children():
             widget.destroy()
-        self.regression_checkboxes = []
 
-    def _render_regression_checklist(self, checklist: list):
-        self._clear_regression_checklist()
-        for item in checklist:
-            var = tk.BooleanVar(value=True)  # 기본은 전체 선택, 원치 않으면 체크 해제
-            cb = ttk.Checkbutton(self.regression_checklist_frame, text=item, variable=var)
-            cb.pack(anchor="w", pady=2)
-            self.regression_checkboxes.append((item, var))
+    def _render_coverage_checklist(self, points: list):
+        self._clear_coverage_checklist()
+        for p in points:
+            mark = "☑" if p.get("covered") else "☐"
+            color = "#2e7d32" if p.get("covered") else "#c62828"
+            label = ttk.Label(self.coverage_checklist_frame, text=f"{mark}  {p.get('point')}", foreground=color)
+            label.pack(anchor="w", pady=2)
 
-    def _on_regression_generate_clicked(self):
-        selected = [item for item, var in self.regression_checkboxes if var.get()]
-        if not selected:
-            messagebox.showwarning("선택 필요", "생성할 시나리오를 하나 이상 체크해주세요.")
+    def _on_coverage_gen_next_clicked(self):
+        if not self.coverage_missing_queue:
+            messagebox.showinfo("완료", "생성할 누락 항목이 더 없습니다.")
             return
 
-        self.regression_generate_btn.config(state="disabled")
-        self.regression_analyze_btn.config(state="disabled")
-        self._regression_log_clear()
-        self._regression_log_append(f"{len(selected)}개 항목 생성을 시작합니다...\n")
+        point = self.coverage_missing_queue.pop(0)
+        self.coverage_current_point = point.get("point")
+        remaining = len(self.coverage_missing_queue)
+        self._set_status_coverage(f"'{self.coverage_current_point}' 생성 중...")
+        self.coverage_progress_label.config(text=f"(남은 누락 항목 {remaining}개)")
+        self.coverage_gen_btn.config(state="disabled")
+        self.coverage_save_btn.config(state="disabled")
+        self._clear_coverage_form()
 
         thread = threading.Thread(
-            target=self._regression_generate_worker, args=(selected,), daemon=True
+            target=self._coverage_gen_worker, args=(self.coverage_current_point,), daemon=True
         )
         thread.start()
 
-    def _regression_generate_worker(self, selected: list):
+    def _coverage_gen_worker(self, scenario: str):
+        try:
+            tc_data = generate_test_case(self.coverage_bug_report, scenario_hint=scenario)
+        except RuntimeError as e:
+            self.root.after(0, self._on_coverage_gen_error, f"[설정 오류] {e}")
+            return
+        except ValueError as e:
+            self.root.after(0, self._on_coverage_gen_error, f"[AI 응답 오류] {e}")
+            return
+        except Exception as e:
+            self.root.after(0, self._on_coverage_gen_error, f"[예상치 못한 오류] {type(e).__name__}: {e}")
+            return
+
+        self.root.after(0, self._on_coverage_gen_success, scenario, tc_data)
+
+    def _on_coverage_gen_success(self, scenario: str, tc_data: dict):
+        self.coverage_current_bug_id = tc_data.get("bug_id", "NA")
+        self._fill_cov_form(tc_data)
+        self._set_status_coverage(f"'{scenario}' 생성 완료. 확인 후 저장하세요.")
+        self.coverage_gen_btn.config(
+            state="normal" if self.coverage_missing_queue else "disabled",
+            text="다음 누락 항목 생성 →" if self.coverage_missing_queue else "모든 항목 처리 완료",
+        )
+        self.coverage_save_btn.config(state="normal")
+
         path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
-        for i, scenario in enumerate(selected, start=1):
-            self.root.after(0, self._regression_log_append, f"\n[{i}/{len(selected)}] '{scenario}' 생성 중...\n")
-            try:
-                tc_data = generate_test_case(self.regression_bug_report, scenario_hint=scenario)
-            except Exception as e:
-                self.root.after(0, self._regression_log_append, f"  [실패] {type(e).__name__}: {e}\n")
-                continue
+        try:
+            matches = find_similar_test_cases(
+                path, title=tc_data.get("title", ""), purpose=tc_data.get("purpose", "")
+            )
+        except Exception:
+            matches = []
+        if matches:
+            top = matches[0]
+            pct = int(top["similarity"] * 100)
+            messagebox.showwarning("중복 가능성", f"기존 저장된 '{top['tc_id']}'와 유사합니다 (유사도 {pct}%).")
 
-            try:
-                matches = find_similar_test_cases(
-                    path, title=tc_data.get("title", ""), purpose=tc_data.get("purpose", "")
-                )
-            except Exception:
-                matches = []
-            if matches:
-                top = matches[0]
-                pct = int(top["similarity"] * 100)
-                self.root.after(
-                    0, self._regression_log_append,
-                    f"  [주의] 유사한 기존 TC 있음: {top['tc_id']} (유사도 {pct}%) - 그래도 저장합니다.\n"
-                )
+    def _on_coverage_gen_error(self, message: str):
+        self._set_status_coverage("생성 실패")
+        self.coverage_gen_btn.config(state="normal" if self.coverage_missing_queue else "disabled")
+        messagebox.showerror("생성 실패", message)
 
-            try:
-                tc_id = append_test_case(path, tc_data["bug_id"], tc_data)
-                self.root.after(0, self._regression_log_append, f"  [저장 완료] {tc_id}: {tc_data.get('title')}\n")
-            except Exception as e:
-                self.root.after(0, self._regression_log_append, f"  [저장 실패] {type(e).__name__}: {e}\n")
+    def _on_coverage_save_clicked(self):
+        tc_data = self._read_cov_form()
+        tc_data["bug_id"] = self.coverage_current_bug_id
+        path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
+        try:
+            tc_id = append_test_case(path, tc_data["bug_id"], tc_data)
+        except Exception as e:
+            messagebox.showerror("저장 실패", f"{type(e).__name__}: {e}")
+            return
+        self._set_status_coverage(f"저장 완료: {tc_id} -> {path}")
+        messagebox.showinfo("저장 완료", f"{tc_id} 가(이) 저장되었습니다.")
 
-        self.root.after(0, self._on_regression_generate_done)
+    def _clear_coverage_form(self):
+        self.cov_field_category.set("")
+        self.cov_field_title.set("")
+        for widget in (self.cov_field_purpose, self.cov_field_precondition,
+                       self.cov_field_input_value, self.cov_field_steps, self.cov_field_expected):
+            widget.delete("1.0", "end")
 
-    def _on_regression_generate_done(self):
-        self._regression_log_append("\n전체 처리 완료.\n")
-        self._set_status_regression("생성/저장 완료")
-        self.regression_generate_btn.config(state="normal")
-        self.regression_analyze_btn.config(state="normal")
+    def _fill_cov_form(self, tc_data: dict):
+        self._clear_coverage_form()
+        self.cov_field_category.set(tc_data.get("category", ""))
+        self.cov_field_title.set(tc_data.get("title", ""))
+        self.cov_field_purpose.insert("1.0", tc_data.get("purpose", ""))
+        self.cov_field_precondition.insert("1.0", tc_data.get("precondition", ""))
+        self.cov_field_input_value.insert("1.0", tc_data.get("input_value", ""))
+        self.cov_field_steps.insert("1.0", "\n".join(tc_data.get("steps", [])))
+        self.cov_field_expected.insert("1.0", tc_data.get("expected", ""))
 
-    def _set_status_regression(self, text: str):
-        self.regression_status.config(text=text)
+    def _read_cov_form(self) -> dict:
+        steps_text = self.cov_field_steps.get("1.0", "end").strip()
+        steps = [line.strip() for line in steps_text.splitlines() if line.strip()]
+        return {
+            "category": self.cov_field_category.get().strip(),
+            "title": self.cov_field_title.get().strip(),
+            "purpose": self.cov_field_purpose.get("1.0", "end").strip(),
+            "precondition": self.cov_field_precondition.get("1.0", "end").strip(),
+            "input_value": self.cov_field_input_value.get("1.0", "end").strip(),
+            "steps": steps,
+            "expected": self.cov_field_expected.get("1.0", "end").strip(),
+        }
 
-    def _regression_log_clear(self):
-        self.regression_log.config(state="normal")
-        self.regression_log.delete("1.0", "end")
-        self.regression_log.config(state="disabled")
+    def _set_status_coverage(self, text: str):
+        self.coverage_status.config(text=text)
 
-    def _regression_log_append(self, text: str):
-        self.regression_log.config(state="normal")
-        self.regression_log.insert("end", text)
-        self.regression_log.see("end")
-        self.regression_log.config(state="disabled")
+    def receive_bug_report_for_coverage(self, text: str):
 
+        self.coverage_input.delete("1.0", "end")
+        self.coverage_input.insert("1.0", text)
+        self._clear_coverage_checklist()
+        self._clear_coverage_form()
+        self.coverage_missing_queue = []
+        self.coverage_gen_btn.config(state="disabled")
+        self.coverage_save_btn.config(state="disabled")
+        self._set_status_coverage("Yona에서 가져온 내용이 입력되었습니다. '커버리지 분석'을 눌러주세요.")
 
 def main():
     root = tk.Tk()

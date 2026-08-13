@@ -11,13 +11,12 @@ _env_path = get_config_dir() / ".env"
 if _env_path.exists():
     load_dotenv(_env_path, override=True)
 
-# 회사/제품명은 코드에 넣지 않고 .env(PRODUCT_NAME)에서 읽음 (공개 저장소 대비)
+
 PRODUCT_NAME = os.getenv("PRODUCT_NAME", "사내 제품")
 
 MODEL = "qwen2.5:7b"
 
-# Ollama의 Structured Outputs 기능용 JSON 스키마
-# (OpenAI와 달리 {"name":.., "schema":..} 로 감싸지 않고 스키마를 그대로 전달)
+
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -60,7 +59,7 @@ RESPONSE_SCHEMA = {
     ],
 }
 
-SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 테스트케이스를 작성하는  QA 엔지니어입니다.
+SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 작성하는 시니어 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 양식에 맞는 데이터를 생성합니다.
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
@@ -110,61 +109,69 @@ MULTI_RESPONSE_SCHEMA = {
 }
 
 
-REGRESSION_CHECKLIST_SCHEMA = {
+COVERAGE_SCHEMA = {
     "type": "object",
     "properties": {
-        "scenarios": {
+        "points": {
             "type": "array",
-            "items": {"type": "string"},
-            "description": "이 기능 영역에서 점검해볼만한 회귀 테스트 시나리오 (2~6단어 짧은 한국어 명사구)",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "point": {"type": "string", "description": "2~6단어 짧은 한국어 명사구"},
+                    "covered": {
+                        "type": "boolean",
+                        "description": "기존 테스트케이스 목록에 이 검증 포인트가 이미 반영되어 있는지",
+                    },
+                },
+                "required": ["point", "covered"],
+            },
         },
     },
-    "required": ["scenarios"],
+    "required": ["points"],
 }
 
-REGRESSION_CHECKLIST_PROMPT = f"""당신은 {PRODUCT_NAME}의  QA 엔지니어입니다.
-주어진 버그 리포트를 보고, 이 버그가 속한 기능 영역 전체에 대한 회귀 테스트(regression test)
-시나리오 목록을 제안합니다. 단순히 버그 리포트 하나를 테스트케이스로 바꾸는 게 아니라,
-"이 기능을 제대로 검증하려면 또 뭘 확인해야 하는가"를 QA 관점에서 폭넓게 브레인스토밍하는 작업입니다.
+COVERAGE_PROMPT = f"""당신은 {PRODUCT_NAME}의 시니어 QA 엔지니어입니다.
+주어진 버그 리포트 안에 실제로 명시된, 서로 다른 검증 포인트(요구사항/케이스)들을 추출합니다.
+그리고 "기존에 작성된 테스트케이스" 목록이 함께 주어지면, 각 검증 포인트가 이미 테스트케이스로
+반영되어 있는지 판단합니다.
 
 반드시 지켜야 할 규칙:
-1. 버그 리포트에 적힌 내용에만 갇히지 말고, 같은 기능 영역에서 QA가 통상적으로 점검해야 할
-   관련 케이스들을 폭넓게 제안합니다.
-   예: 공백 처리 버그라면 -> 공백 입력, 앞뒤 공백, 대소문자 차이, 중복 검사, 특수문자 입력,
-       최대 길이 초과, 정상 입력 확인 등
-2. "이미 존재하는 테스트케이스 제목" 목록이 함께 주어지면, 그것과 사실상 동일한 시나리오는
-   제안하지 않습니다 (표현만 바꿔서 중복 제안하지 않음).
-3. 각 항목은 2~6단어 정도의 짧은 한국어 명사구로 표현합니다 (예: "공백만 입력", "대소문자 차이 확인").
-4. 5개~10개 사이로 제안합니다. 억지로 개수를 채우지 않고, 실제로 이 기능과 관련 없는
-   엉뚱한 시나리오는 제안하지 않습니다.
-5. 순서는 중요도/우선순위가 높은 것부터 나열합니다."""
+1. 버그 리포트(버그 설명/재현 스텝/기대 결과/실제 결과)에 실제로 언급된 내용만 포인트로 추출합니다.
+   버그 리포트에 없는 새로운 아이디어를 브레인스토밍해서 추가하지 않습니다. 이 기능은
+   "리포트에 적힌 걸 빠짐없이 테스트로 만들었는가"를 감사하는 작업이지, 새 시나리오를
+   제안하는 작업이 아닙니다.
+2. 재현 스텝 안에 여러 개의 서로 다른 입력/조건이 섞여 있으면 각각을 별도 포인트로 나눕니다.
+   예: "공백 입력 시 저장됨 / 중복 이름도 저장됨 / 특수문자도 저장됨" -> 3개 포인트
+3. "기존에 작성된 테스트케이스" 목록이 주어지면, 그 제목/목적에 해당 포인트가 실질적으로
+   반영되어 있으면 covered=true, 아니면 covered=false로 표시합니다.
+   목록이 아예 없으면 모든 포인트를 covered=false로 표시합니다.
+4. 각 포인트는 2~6단어의 짧은 한국어 명사구로 표현합니다 (예: "공백 입력", "최대 길이 초과").
+5. 버그 리포트에 실제로 있는 포인트만 다루므로, 억지로 개수를 맞추지 않습니다."""
 
 
-def generate_regression_checklist(bug_report_text: str, existing_titles: list = None) -> list:
-    """
-    버그 리포트를 출발점으로, 같은 기능 영역의 회귀 테스트 시나리오 후보 목록을 브레인스토밍.
-    (기존 다중 시나리오 추출과 달리, 버그 리포트에 명시되지 않은 관련 케이스까지 폭넓게 제안함)
+def analyze_bug_coverage(bug_report_text: str, existing_tc_summaries: list = None) -> list:
 
-    existing_titles: 이미 Excel에 저장된 테스트케이스 제목들. 주면 중복 제안을 피함.
-
-    반환: ["공백만 입력", "대소문자 차이 확인", ...] 형태의 짧은 시나리오 문구 리스트
-    """
     client = Client()
 
     user_content = f"[버그 리포트]\n{bug_report_text}"
-    if existing_titles:
-        titles_text = "\n".join(f"- {t}" for t in existing_titles[:50])
-        user_content += f"\n\n[이미 존재하는 테스트케이스 제목들 (중복 제안 금지)]\n{titles_text}"
+    if existing_tc_summaries:
+        lines = [
+            f"- {s.get('title', '')} (목적: {s.get('purpose', '')})"
+            for s in existing_tc_summaries[:50]
+        ]
+        user_content += "\n\n[기존에 작성된 테스트케이스 목록]\n" + "\n".join(lines)
+    else:
+        user_content += "\n\n[기존에 작성된 테스트케이스 목록]\n(없음 - 아직 이 버그에 대한 TC가 하나도 없음)"
 
     try:
         response = client.chat(
             model=MODEL,
             messages=[
-                {"role": "system", "content": REGRESSION_CHECKLIST_PROMPT},
+                {"role": "system", "content": COVERAGE_PROMPT},
                 {"role": "user", "content": user_content},
             ],
-            format=REGRESSION_CHECKLIST_SCHEMA,
-            options={"temperature": 0.4},  # 브레인스토밍이라 일반 생성보다 다양성을 조금 더 허용
+            format=COVERAGE_SCHEMA,
+            options={"temperature": 0.2},
         )
     except Exception as e:
         raise _connection_error(e) from e
@@ -177,12 +184,11 @@ def generate_regression_checklist(bug_report_text: str, existing_titles: list = 
             f"모델 응답을 JSON으로 파싱하지 못했습니다.\n원본 응답:\n{raw_content}"
         ) from e
 
-    scenarios = [s.strip() for s in parsed.get("scenarios", []) if s and s.strip()]
-    if not scenarios:
-        raise ValueError(f"모델이 회귀 테스트 시나리오를 하나도 제안하지 않았습니다.\n응답: {parsed}")
+    points = parsed.get("points", [])
+    if not points:
+        raise ValueError(f"모델이 검증 포인트를 하나도 추출하지 못했습니다.\n응답: {parsed}")
 
-    return scenarios
-
+    return points
 
 
 NEGATIVE_ANALYSIS_SCHEMA = {
@@ -206,7 +212,7 @@ NEGATIVE_ANALYSIS_SCHEMA = {
     "required": ["items"],
 }
 
-NEGATIVE_ANALYSIS_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 엔지니어입니다.
+NEGATIVE_ANALYSIS_PROMPT = f"""당신은 {PRODUCT_NAME}의 시니어 QA 엔지니어입니다.
 주어진 테스트케이스 하나를 보고, 이 테스트케이스가 검증하는 입력값/필드에 대해
 QA가 일반적으로 점검해야 하는 표준 테스트 시나리오 체크리스트를 만들고,
 그중 어떤 게 이미 커버됐고 어떤 게 빠져있는지 판단합니다.
@@ -267,7 +273,7 @@ def analyze_negative_tests(reference_tc_text: str, existing_titles: list = None)
     return items
 
 
-NEGATIVE_GENERATION_PROMPT = f"""당신은 {PRODUCT_NAME}의 테스트케이스를 작성하는 QA 엔지니어입니다.
+NEGATIVE_GENERATION_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 작성하는 시니어 QA 엔지니어입니다.
 [기존 테스트케이스]는 같은 기능을 검증하는 참고용 테스트케이스입니다. 이를 참고해서,
 [새로 작성할 시나리오]에 해당하는 새로운 테스트케이스를 작성합니다.
 
@@ -283,10 +289,7 @@ NEGATIVE_GENERATION_PROMPT = f"""당신은 {PRODUCT_NAME}의 테스트케이스�
 
 
 def generate_negative_test_case(reference_tc_text: str, scenario_hint: str) -> dict:
-    """
-    기존 테스트케이스 하나를 참고해서, 주어진 시나리오(빠진 항목)에 대한
-    새 테스트케이스를 생성. (버그 리포트가 아니라 기존 TC가 출발점이라는 점이 다름)
-    """
+
     client = Client()
 
     user_content = f"[기존 테스트케이스]\n{reference_tc_text}\n\n[새로 작성할 시나리오]\n{scenario_hint}"
@@ -326,7 +329,10 @@ def generate_negative_test_case(reference_tc_text: str, scenario_hint: str) -> d
 
 
 def _extract_bug_id(bug_report_text: str) -> str:
-    """버그 리포트 제목 앞의 숫자(Yona 이슈 번호)를 추출. 못 찾으면 'NA' 반환."""
+
+    match = re.search(r"TC_(\d+)", bug_report_text)
+    if match:
+        return match.group(1)
     match = re.search(r"\b(\d{2,6})\b", bug_report_text)
     return match.group(1) if match else "NA"
 
@@ -341,20 +347,16 @@ def _fill_blank_fields(tc_data: dict) -> dict:
 
 
 def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
-    """
-    버그 리포트 원문을 받아 로컬 Ollama 모델을 호출하고, 테스트케이스 dict를 반환.
 
-    scenario_hint: 버그 리포트에 시나리오가 여러 개일 때, 이번에 어떤 걸 뽑을지
-                   힌트를 주고 싶으면 사용 (예: "공백만 입력하는 케이스만").
-
-    반환: {"category", "title", "purpose", "precondition",
-           "input_value", "steps", "expected", "bug_id"}
-    """
     client = Client()  # 기본값으로 http://localhost:11434 에 연결
 
     user_content = f"[버그 리포트]\n{bug_report_text}"
     if scenario_hint:
-        user_content += f"\n\n[이번에 작성할 시나리오 힌트]\n{scenario_hint}"
+        user_content += (
+            f"\n\n[이번에 반드시 반영해야 할 시나리오]\n{scenario_hint}\n"
+            "위 시나리오에 맞게 input_value/steps/expected를 구체적으로 다르게 작성하세요. "
+            "버그 리포트의 대표 시나리오를 그대로 재사용하지 말고, 이 시나리오만의 고유한 조건을 반영하세요."
+        )
 
     try:
         response = client.chat(
