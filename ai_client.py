@@ -16,7 +16,6 @@ PRODUCT_NAME = os.getenv("PRODUCT_NAME", "사내 제품")
 
 MODEL = "qwen2.5:7b"
 
-
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -64,18 +63,50 @@ Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 �
 반드시 지정된 JSON 스키마 형식으로만 응답합니다.
 
 반드시 지켜야 할 규칙:
-1. steps는 실제 재현 가능한 조작 순서로, 버그 리포트의 '재현 스텝'을 테스트 절차로 다듬어서 작성합니다.
-2. expected는 버그 리포트의 '기대 결과'를 근거로 작성하되, 테스트가 통과/실패를 판단할 수 있도록 검증 가능한 문장으로 씁니다.
-3. 버그 리포트에 여러 개의 검증 포인트가 섞여 있으면(예: 케이스 A + 케이스 B), 이번 호출에서는 가장 핵심적인 시나리오 하나만 골라 하나의 테스트케이스로 작성합니다.
-4. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
-5. precondition과 input_value는 절대 빈 문자열로 두지 않습니다.
-   - precondition: 버그 리포트에 명시적으로 없으면, 재현 스텝의 앞부분(첫 번째로 확인하는 스텝 전까지의 상태)이나
-     버그 설명의 맥락에서 합리적으로 추론해서 채웁니다. 예: "특정 프로젝트 파일이 열려 있고 대상 항목이 선택된 상태".
-     정말 해당하는 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
+1. title은 버그 번호를 포함하지 않습니다. 버그 리포트 제목 앞의 숫자(예: "258")를 그대로
+   가져다 쓰지 않습니다.
+2. title은 "버그가 이렇게 발생한다"는 증상 서술이 아니라, "무엇을 검증하는 테스트인지"가
+   드러나야 합니다. 버그 리포트의 제목이나 문장을 그대로 복사하지 말고, 검증 목적 중심으로
+   다시 씁니다.
+   나쁜 예: "잘못된 파일 형식으로 도메인 가져오기 시스템이 성공적으로 처리됨"
+            (버그 증상을 마치 사실처럼 서술 - 이렇게 쓰지 않음)
+   좋은 예: "잘못된 Excel 파일 형식으로 도메인 가져오기 차단 확인"
+            (무엇을 검증하는지, 확인/검증 목적이 분명하게 드러남)
+3. steps는 실제 재현 가능한 조작 순서로, 버그 리포트의 '재현 스텝'을 테스트 절차로 다듬어서 작성합니다.
+4. expected는 버그 리포트의 '기대 결과'를 근거로 작성하되, 테스트가 통과/실패를 판단할 수 있도록 검증 가능한 문장으로 씁니다.
+5. 버그 리포트에 여러 개의 검증 포인트가 섞여 있으면(예: 케이스 A + 케이스 B), 이번 호출에서는 가장 핵심적인 시나리오 하나만 골라 하나의 테스트케이스로 작성합니다.
+6. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
+7. precondition과 input_value는 절대 빈 문자열로 두지 않되, 절대 구체적인 사실을 지어내지 않습니다.
+   - precondition: steps의 1번째 스텝 "이전"의 상태만 기술합니다. steps에서 나중에 수행할 행동
+     (예: "엔터티를 생성한다"가 1번 스텝이면, "엔터티가 이미 생성되어 있는 상태"라고 미리 있다고
+     쓰면 안 됨 - 논리적으로 모순됩니다)을 사전조건에 이미 완료된 것처럼 쓰지 않습니다.
+     버그 리포트에 파일명/프로젝트명 등 구체적인 정보가 실제로 없으면, "특정 프로젝트 파일" 같은
+     그럴듯하지만 근거 없는 표현을 지어내지 말고, steps에서 실제로 확인 가능한 만큼만
+     일반적인 수준으로 씁니다 (예: "해당 기능을 실행할 수 있는 상태"). 정말 특별히 필요한
+     사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
    - input_value: 이 버그가 특정 텍스트/숫자 입력값을 검증하는 게 아니라 UI 상태나 화면 갱신 문제라면,
      "해당 없음"이라고 명시적으로 씁니다. 빈 문자열로 남기지 않습니다.
-6. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
-7. 모든 필드는 한국어로 작성합니다."""
+8. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
+9. 모든 필드는 한국어로 작성합니다. 모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
+    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
+    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다.
+10.expected에는 "실제 결과"를 절대로 작성하지 않습니다.
+    테스트케이스의 expected는 반드시 버그 리포트의 "기대 결과"를 기준으로 작성합니다.
+
+    예를 들어 버그 리포트가:
+    - 실제 결과: 공백 입력이 저장됨
+    - 기대 결과: 공백 입력은 저장되지 않아야 함
+
+    이라면 expected는 반드시:
+    "공백 입력 후 저장되지 않아야 합니다."
+    와 같이 작성해야 합니다.
+
+    "공백 입력이 저장되어야 합니다"처럼 현재 버그 증상을
+    정상 동작으로 기술하면 안 됩니다.
+
+11. 테스트케이스는 "버그가 재현되는지"가 아니라
+    "버그가 수정되었는지/요구사항대로 동작하는지"를 검증하는 방향으로 작성합니다.
+"""
 
 MULTI_SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 작성하는 시니어 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 서로 다른 검증 시나리오를 모두 찾아내고,
@@ -86,15 +117,25 @@ Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 �
    예: "공백만 입력" 케이스와 "앞뒤 공백 포함 중복 등록" 케이스는 입력값과 검증 포인트가 다르므로 별개 시나리오입니다.
 2. 같은 내용을 표현만 바꿔서 중복 생성하지 않습니다. 진짜로 다른 조건/결과를 검증하는 경우만 별도 시나리오로 나눕니다.
 3. 시나리오가 하나뿐이면 배열에 하나만 넣어서 반환합니다. 억지로 여러 개로 쪼개지 않습니다.
-4. steps는 실제 재현 가능한 조작 순서로 작성합니다.
-5. expected는 버그 리포트의 '기대 결과'를 근거로, 통과/실패를 판단할 수 있는 검증 가능한 문장으로 씁니다.
-6. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
-7. precondition과 input_value는 절대 빈 문자열로 두지 않습니다.
-   - precondition: 버그 리포트에 명시적으로 없으면, 재현 스텝의 앞부분이나 버그 설명의 맥락에서 합리적으로 추론해서 채웁니다.
-     정말 해당하는 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
+4. title은 버그 번호를 포함하지 않습니다. 버그 리포트 제목 앞의 숫자를 그대로 가져다 쓰지 않습니다.
+5. title은 "버그가 이렇게 발생한다"는 증상 서술이 아니라, "무엇을 검증하는 테스트인지"가
+   드러나야 합니다. 버그 리포트 제목을 그대로 복사하지 말고 검증 목적 중심으로 다시 씁니다.
+   나쁜 예: "잘못된 파일 형식으로 도메인 가져오기 시스템이 성공적으로 처리됨"
+   좋은 예: "잘못된 Excel 파일 형식으로 도메인 가져오기 차단 확인"
+6. steps는 실제 재현 가능한 조작 순서로 작성합니다.
+7. expected는 버그 리포트의 '기대 결과'를 근거로, 통과/실패를 판단할 수 있는 검증 가능한 문장으로 씁니다.
+8. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
+9. precondition과 input_value는 절대 빈 문자열로 두지 않되, 절대 구체적인 사실을 지어내지 않습니다.
+   - precondition: steps의 1번째 스텝 이전의 상태만 기술합니다. steps에서 나중에 수행할 행동을
+     이미 완료된 것처럼 미리 쓰지 않습니다(논리적 모순). 버그 리포트에 없는 파일명/프로젝트명 등을
+     그럴듯하게 지어내지 말고, 실제로 확인 가능한 만큼만 일반적인 수준으로 씁니다.
+     정말 필요한 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
    - input_value: 특정 입력값이 아니라 UI 상태/화면 갱신 문제라면 "해당 없음"이라고 명시적으로 씁니다.
-8. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
-9. 모든 필드는 한국어로 작성합니다."""
+10. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
+11. 모든 필드는 한국어로 작성합니다. 모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
+    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
+    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다.
+"""
 
 MULTI_RESPONSE_SCHEMA = {
     "type": "object",
@@ -107,6 +148,7 @@ MULTI_RESPONSE_SCHEMA = {
     },
     "required": ["scenarios"],
 }
+
 
 
 COVERAGE_SCHEMA = {
@@ -191,6 +233,8 @@ def analyze_bug_coverage(bug_report_text: str, existing_tc_summaries: list = Non
     return points
 
 
+
+
 NEGATIVE_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
@@ -228,16 +272,13 @@ QA가 일반적으로 점검해야 하는 표준 테스트 시나리오 체크�
    covered=true로 표시합니다 (표현이 달라도 의미가 같으면 커버된 것으로 봄).
 5. 나머지는 covered=false로 표시합니다 (= 빠진 시나리오, 이게 이 기능의 핵심 목적입니다).
 6. 5개~10개 사이 항목을 제안합니다.
-7. 각 scenario는 2~6단어의 짧은 한국어 명사구로 씁니다."""
+7. 각 scenario는 2~6단어의 짧은 한국어 명사구로 씁니다.모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
+    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
+    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다."""
 
 
 def analyze_negative_tests(reference_tc_text: str, existing_titles: list = None) -> list:
-    """
-    기존 테스트케이스 하나를 보고, 그 입력/필드에 대한 표준 체크리스트를 만들어서
-    이미 커버된 것과 빠진 것을 구분해서 반환.
 
-    반환: [{"scenario": "빈 문자열", "covered": False}, ...]
-    """
     client = Client()
 
     user_content = f"[테스트케이스]\n{reference_tc_text}"
@@ -285,7 +326,9 @@ NEGATIVE_GENERATION_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이�
    해당 없으면 "해당 없음"/"특별한 사전 조건 없음"이라고 명시적으로 씁니다.
 4. 기존 테스트케이스에 없는 사실을 근거 없이 지어내지는 않되, 이 시나리오 자체가 요구하는
    일반적인 QA 테스트 설계 지식(경계값, 특수문자 등 표준 기법)은 활용해도 됩니다.
-5. 모든 필드는 한국어로 작성합니다."""
+5. 모든 필드는 한국어로 작성합니다.모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
+    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
+    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다."""
 
 
 def generate_negative_test_case(reference_tc_text: str, scenario_hint: str) -> dict:
@@ -324,6 +367,7 @@ def generate_negative_test_case(reference_tc_text: str, scenario_hint: str) -> d
         raise ValueError(f"응답에 필수 키가 빠져 있습니다: {missing}\n응답: {tc_data}")
 
     tc_data = _fill_blank_fields(tc_data)
+    tc_data = _strip_bug_number_from_title(tc_data)
     tc_data["bug_id"] = _extract_bug_id(reference_tc_text)
     return tc_data
 
@@ -338,11 +382,20 @@ def _extract_bug_id(bug_report_text: str) -> str:
 
 
 def _fill_blank_fields(tc_data: dict) -> dict:
-    """모델이 프롬프트 지시를 놓쳐서 precondition/input_value를 빈 문자열로 남긴 경우를 위한 안전장치."""
+
     if not tc_data.get("precondition", "").strip():
         tc_data["precondition"] = "특별한 사전 조건 없음"
     if not tc_data.get("input_value", "").strip():
         tc_data["input_value"] = "해당 없음"
+    return tc_data
+
+
+def _strip_bug_number_from_title(tc_data: dict) -> dict:
+
+    title = tc_data.get("title", "")
+    cleaned = re.sub(r"^\s*\d{2,6}\s*[\.\)]?\s*", "", title).strip()
+    if cleaned:
+        tc_data["title"] = cleaned
     return tc_data
 
 
@@ -366,7 +419,7 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
                 {"role": "user", "content": user_content},
             ],
             format=RESPONSE_SCHEMA,
-            options={"temperature": 0.2},  # 테스트케이스는 일관성이 중요하므로 낮게 설정
+            options={"temperature": 0.2},
         )
     except Exception as e:
         raise RuntimeError(
@@ -394,6 +447,7 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
         raise ValueError(f"응답에 필수 키가 빠져 있습니다: {missing}\n응답: {tc_data}")
 
     tc_data = _fill_blank_fields(tc_data)
+    tc_data = _strip_bug_number_from_title(tc_data)
     tc_data["bug_id"] = _extract_bug_id(bug_report_text)
     return tc_data
 
@@ -453,6 +507,7 @@ def generate_test_cases_multi(bug_report_text: str) -> list:
                 f"{i}번째 시나리오 응답에 필수 키가 빠져 있습니다: {missing}\n응답: {tc_data}"
             )
         tc_data = _fill_blank_fields(tc_data)
+        tc_data = _strip_bug_number_from_title(tc_data)
         tc_data["bug_id"] = bug_id
         result.append(tc_data)
 
@@ -460,7 +515,7 @@ def generate_test_cases_multi(bug_report_text: str) -> list:
 
 
 if __name__ == "__main__":
-    # 실제 로컬 모델 호출 테스트 (Ollama가 실행 중이고 모델이 받아져 있어야 동작)
+
     sample_bug = """
 제목: 298 도메인명 공백 입력 및 Trim 미처리로 인한 중복 등록 가능 버그
 

@@ -28,7 +28,7 @@ DEFAULT_OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
 
 
 def _sanitize_filename(text: str) -> str:
-
+    """파일명으로 못 쓰는 문자 제거/치환, 너무 길면 자름."""
     text = re.sub(r'[\\/:*?"<>|]', "", text).strip()
     text = re.sub(r"\s+", "_", text)
     return text[:40] if text else "bugreport"
@@ -38,7 +38,18 @@ class TestCaseGeneratorApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("AI 기반 Test Case Generator")
-        self.root.geometry("900x780")
+        self.root.geometry("1000x900")
+
+        # 탭 선택 시 색이 바뀌도록 스타일 설정.
+        # (Windows 기본 테마는 탭 배경색 커스터마이징을 대부분 무시해서 'clam' 테마로 전환)
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TNotebook.Tab", padding=[14, 8])
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", "#2b6cb0"), ("!selected", "#d9d9d9")],
+            foreground=[("selected", "white"), ("!selected", "#333333")],
+        )
 
         self.current_tc_data = None  # 버그->TC 탭: 마지막 생성 시 bug_id 등 보관용
         self.current_bug_fields = None  # TC->버그 탭: 저장 파일명 생성용 (title 참조)
@@ -224,7 +235,7 @@ class TestCaseGeneratorApp:
         ttk.Label(main, text="Yona 버그 리포트 (제목, 버그 설명, 재현 스텝, 기대 결과 등 통째로 붙여넣기)").pack(
             anchor="w"
         )
-        self.bug_input = tk.Text(main, height=8, wrap="word")
+        self.bug_input = tk.Text(main, height=16, wrap="word")
         self.bug_input.pack(fill="both", expand=False, pady=(2, 8))
 
         hint_frame = ttk.Frame(main)
@@ -964,7 +975,7 @@ class TestCaseGeneratorApp:
         self.coverage_status.config(text=text)
 
     def receive_bug_report_for_coverage(self, text: str):
-
+        """Yona 탭 등 다른 곳에서 텍스트를 이 탭으로 보낼 때 사용."""
         self.coverage_input.delete("1.0", "end")
         self.coverage_input.insert("1.0", text)
         self._clear_coverage_checklist()

@@ -1,3 +1,4 @@
+
 import os
 import re
 import requests
@@ -7,11 +8,13 @@ from paths import get_config_dir
 
 ENV_PATH = get_config_dir() / ".env"
 
+
 if ENV_PATH.exists():
     load_dotenv(ENV_PATH, override=True)
 
 
 def get_env_path():
+
     return ENV_PATH
 
 
@@ -20,7 +23,7 @@ def has_token() -> bool:
 
 
 def has_connection_settings() -> bool:
-    """토큰 + 접속 정보(BASE_URL/OWNER/PROJECT)가 전부 설정되어 있는지."""
+
     return bool(
         os.getenv("YONA_API_TOKEN")
         and os.getenv("YONA_BASE_URL")
@@ -30,12 +33,12 @@ def has_connection_settings() -> bool:
 
 
 def save_token(token: str) -> None:
-    """토큰을 영구 설정 위치에 저장하고, 현재 프로세스 환경변수에도 즉시 반영."""
+
     _save_env_value("YONA_API_TOKEN", token)
 
 
 def save_connection_settings(base_url: str, owner: str, project: str) -> None:
-    """Yona 접속 정보(회사/조직별로 다른 값)를 영구 설정 위치에 저장."""
+
     _save_env_value("YONA_BASE_URL", base_url.rstrip("/"))
     _save_env_value("YONA_OWNER", owner)
     _save_env_value("YONA_PROJECT", project)
@@ -116,7 +119,7 @@ def fetch_issue(issue_number, owner: str = None, project: str = None) -> dict:
 
 
 def _strip_image_markdown(text: str) -> str:
-    """본문 안의 ![파일명](경로) 형태 이미지 마크다운 제거 (테스트케이스 생성에 불필요)."""
+
     return re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text or "").strip()
 
 
