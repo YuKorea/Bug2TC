@@ -81,13 +81,7 @@ Ollama가 백그라운드에서 켜져 있어야 합니다 (설치 후 자동 �
 pip install pyinstaller
 pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 ```
- 
-코드/아이콘 변경 후에는 캐시 때문에 반영이 안 된 것처럼 보일 수 있으니 지우고 재빌드:
-```powershell
-Remove-Item -Recurse -Force dist, build, TCGenerator.spec
-pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
-```
- 
+
 ---
  
 ## 파일 구성
@@ -109,18 +103,12 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 |---|---|
 | 카테고리, 테스트 제목, 테스트 목적, 사전 조건, 입력값, 테스트 절차, 기대결과 | 검토, P/F, 비고 |
  
-## 알려진 제약
+## 제약
  
 - Yona 이슈 **작성(등록)**은 아직 API 연동이 없습니다 — 생성된 텍스트를 직접 복사해 붙여넣어야 합니다.
 - GUI는 다중 시나리오 추출을 지원하지 않습니다 (CLI 전용).
 - 중복 경고는 참고용이며 저장을 막지 않습니다.
-## 다른 사람에게 전달하기
- 
-로컬 AI 구조라 exe 하나만으로는 안 되고, 받는 사람도 Ollama 설치 + `ollama pull qwen2.5:7b`를 한 번 해야 합니다. Yona 접속 정보/토큰도 각자 PC에서 개별 설정합니다.
- 
-- SmartScreen 경고 뜨면 "추가 정보 → 실행"
-- 회사 백신이 오탐하면 IT 담당자에게 예외 요청
-- `testcase.xlsx`는 실행한 사람의 바탕화면에 개별 저장
+
 ## 기술 스택
  
 Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller
@@ -211,13 +199,7 @@ Required values: Yona URL, Owner (team), Project, API token (issued from Yona ac
 pip install pyinstaller
 pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 ```
- 
-If changes don't seem to apply after rebuilding, clear the cache first:
-```powershell
-Remove-Item -Recurse -Force dist, build, TCGenerator.spec
-pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
-```
- 
+
 ---
  
 ## Project Structure
@@ -244,13 +226,7 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 - No API integration for **creating** Yona issues yet — the generated text must be copied in manually.
 - Multi-scenario extraction is CLI-only.
 - The duplicate warning is advisory and never blocks saving.
-## Distributing the Application
- 
-Since this uses a fully local AI, sharing just the `.exe` isn't enough — recipients must also install Ollama and run `ollama pull qwen2.5:7b` once. Yona connection info/token is configured individually on each machine.
- 
-- SmartScreen warning: click "More info → Run anyway"
-- If corporate antivirus flags it, ask IT to whitelist
-- `testcase.xlsx` is saved to each user's own Desktop
+
 ## Tech Stack
  
 Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller
