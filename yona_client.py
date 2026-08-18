@@ -1,4 +1,3 @@
-
 import os
 import re
 import requests
@@ -8,7 +7,7 @@ from paths import get_config_dir
 
 ENV_PATH = get_config_dir() / ".env"
 
-
+# 앱 시작 시 영구 설정 위치에서 로드. 파일이 없으면 조용히 넘어감(첫 실행 등).
 if ENV_PATH.exists():
     load_dotenv(ENV_PATH, override=True)
 
@@ -33,12 +32,12 @@ def has_connection_settings() -> bool:
 
 
 def save_token(token: str) -> None:
-
+    """토큰을 영구 설정 위치에 저장하고, 현재 프로세스 환경변수에도 즉시 반영."""
     _save_env_value("YONA_API_TOKEN", token)
 
 
 def save_connection_settings(base_url: str, owner: str, project: str) -> None:
-
+    """Yona 접속 정보(회사/조직별로 다른 값)를 영구 설정 위치에 저장."""
     _save_env_value("YONA_BASE_URL", base_url.rstrip("/"))
     _save_env_value("YONA_OWNER", owner)
     _save_env_value("YONA_PROJECT", project)
@@ -118,16 +117,25 @@ def fetch_issue(issue_number, owner: str = None, project: str = None) -> dict:
     return result
 
 
-def _strip_image_markdown(text: str) -> str:
+def _strip_attachment_markup(text: str) -> str:
 
-    return re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text or "").strip()
+    text = text or ""
+    text = re.sub(r"<video[^>]*>.*?</video>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)  # 이미지
+    text = re.sub(r"\[[^\]]*\]\(/files/[^)]*\)", "", text)  # 첨부파일 링크
+    text = re.sub(r"[♪♬]", "", text)  # Yona가 동영상 자리에 남기는 장식 문자
+    text = re.sub(r"\n{3,}", "\n\n", text)  # 지워진 자리에 생기는 빈 줄 정리
+    return text.strip()
 
 
 def issue_to_bug_report_text(issue_data: dict) -> str:
-
+    """
+    Yona 이슈 dict를 기존 generate_test_case()에 바로 넣을 수 있는
+    일반 텍스트(제목 + 본문)로 변환.
+    """
     number = issue_data.get("number", "")
     title = issue_data.get("title", "")
-    body = _strip_image_markdown(issue_data.get("body", ""))
+    body = _strip_attachment_markup(issue_data.get("body", ""))
     return f"제목: {number} {title}\n\n{body}"
 
 

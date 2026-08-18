@@ -1,4 +1,3 @@
-
 import os
 import re
 import threading
@@ -28,7 +27,7 @@ DEFAULT_OUTPUT_FILE = str(get_desktop_path() / "testcase.xlsx")
 
 
 def _sanitize_filename(text: str) -> str:
-    """파일명으로 못 쓰는 문자 제거/치환, 너무 길면 자름."""
+
     text = re.sub(r'[\\/:*?"<>|]', "", text).strip()
     text = re.sub(r"\s+", "_", text)
     return text[:40] if text else "bugreport"
@@ -40,8 +39,6 @@ class TestCaseGeneratorApp:
         self.root.title("AI 기반 Test Case Generator")
         self.root.geometry("1000x900")
 
-        # 탭 선택 시 색이 바뀌도록 스타일 설정.
-        # (Windows 기본 테마는 탭 배경색 커스터마이징을 대부분 무시해서 'clam' 테마로 전환)
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("TNotebook.Tab", padding=[14, 8])
@@ -65,7 +62,6 @@ class TestCaseGeneratorApp:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # 탭 순서: Yona조회 / 버그 작성 -> (둘 다 "버그 리포트를 만드는 방법") -> 버그->TC -> TC->버그 -> 커버리지
         tab_yona = ttk.Frame(self.notebook, padding=10)
         tab_author = ttk.Frame(self.notebook, padding=10)
         tab_forward = ttk.Frame(self.notebook, padding=10)
@@ -740,8 +736,9 @@ class TestCaseGeneratorApp:
             text="버그 리포트에 실제로 적힌 검증 포인트를 뽑아서, 이미 작성된 TC가 그걸 빠짐없이 반영했는지 대조합니다.",
         ).pack(anchor="w", pady=(0, 8))
 
-        self.coverage_input = tk.Text(main, height=8, wrap="word")
-        self.coverage_input.pack(fill="both", expand=False, pady=(0, 8))
+        # 버그 리포트 입력창: 창을 늘리면 같이 커지도록 expand=True
+        self.coverage_input = tk.Text(main, height=14, wrap="word")
+        self.coverage_input.pack(fill="both", expand=True, pady=(0, 8))
 
         action_frame = ttk.Frame(main)
         action_frame.pack(fill="x", pady=(0, 8))
@@ -754,12 +751,12 @@ class TestCaseGeneratorApp:
 
         ttk.Label(main, text="버그 검증 포인트").pack(anchor="w")
         checklist_container = ttk.Frame(main, relief="groove", borderwidth=1)
-        checklist_container.pack(fill="x", pady=(2, 8))
+        checklist_container.pack(fill="both", expand=True, pady=(2, 8))
         self.coverage_checklist_frame = ttk.Frame(checklist_container)
         self.coverage_checklist_frame.pack(fill="both", expand=True, padx=8, pady=8, anchor="nw")
 
         queue_frame = ttk.Frame(main)
-        queue_frame.pack(fill="x", pady=(0, 8))
+        queue_frame.pack(fill="x", pady=(0, 4))
         self.coverage_gen_btn = ttk.Button(
             queue_frame, text="다음 누락 항목 생성 →", command=self._on_coverage_gen_next_clicked,
             state="disabled",
@@ -768,8 +765,23 @@ class TestCaseGeneratorApp:
         self.coverage_progress_label = ttk.Label(queue_frame, text="", foreground="#555555")
         self.coverage_progress_label.pack(side="left", padx=12)
 
+
+        nav_frame = ttk.Frame(main)
+        nav_frame.pack(fill="x", pady=(0, 6))
+        self.coverage_prev_btn = ttk.Button(
+            nav_frame, text="◀ 이전 항목", command=self._on_coverage_prev_clicked, state="disabled"
+        )
+        self.coverage_prev_btn.pack(side="left")
+        self.coverage_next_history_btn = ttk.Button(
+            nav_frame, text="다음 항목 ▶", command=self._on_coverage_next_history_clicked, state="disabled"
+        )
+        self.coverage_next_history_btn.pack(side="left", padx=(6, 0))
+        self.coverage_history_label = ttk.Label(nav_frame, text="", foreground="#555555")
+        self.coverage_history_label.pack(side="left", padx=12)
+
+
         form = ttk.LabelFrame(main, text="생성된 테스트케이스 (직접 수정 후 저장 가능)")
-        form.pack(fill="both", expand=True, pady=(4, 8))
+        form.pack(fill="x", expand=False, pady=(4, 8))
 
         row1 = ttk.Frame(form)
         row1.pack(fill="x", padx=6, pady=(6, 4))
@@ -791,6 +803,10 @@ class TestCaseGeneratorApp:
         )
         self.coverage_save_btn.pack(anchor="e")
 
+
+        self.coverage_history = []  # [{"point": str, "tc_data": dict}, ...]
+        self.coverage_history_index = -1
+
     def _on_coverage_analyze_clicked(self):
         bug_report = self.coverage_input.get("1.0", "end").strip()
         if not bug_report:
@@ -802,6 +818,9 @@ class TestCaseGeneratorApp:
         self.coverage_gen_btn.config(state="disabled")
         self.coverage_save_btn.config(state="disabled")
         self.coverage_missing_queue = []
+        self.coverage_history = []
+        self.coverage_history_index = -1
+        self._refresh_coverage_nav()
         self._set_status_coverage("기존 TC 확인 및 검증 포인트 분석 중...")
         self._clear_coverage_checklist()
         self._clear_coverage_form()
@@ -912,6 +931,11 @@ class TestCaseGeneratorApp:
         )
         self.coverage_save_btn.config(state="normal")
 
+
+        self.coverage_history.append({"point": scenario, "tc_data": dict(tc_data)})
+        self.coverage_history_index = len(self.coverage_history) - 1
+        self._refresh_coverage_nav()
+
         path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
         try:
             matches = find_similar_test_cases(
@@ -932,6 +956,11 @@ class TestCaseGeneratorApp:
     def _on_coverage_save_clicked(self):
         tc_data = self._read_cov_form()
         tc_data["bug_id"] = self.coverage_current_bug_id
+
+
+        if 0 <= self.coverage_history_index < len(self.coverage_history):
+            self.coverage_history[self.coverage_history_index]["tc_data"] = dict(tc_data)
+
         path = self.output_path.get().strip() or DEFAULT_OUTPUT_FILE
         try:
             tc_id = append_test_case(path, tc_data["bug_id"], tc_data)
@@ -940,6 +969,47 @@ class TestCaseGeneratorApp:
             return
         self._set_status_coverage(f"저장 완료: {tc_id} -> {path}")
         messagebox.showinfo("저장 완료", f"{tc_id} 가(이) 저장되었습니다.")
+
+    def _on_coverage_prev_clicked(self):
+        if self.coverage_history_index <= 0:
+            return
+        self._save_current_form_to_history()
+        self.coverage_history_index -= 1
+        self._load_history_item(self.coverage_history_index)
+
+    def _on_coverage_next_history_clicked(self):
+        if self.coverage_history_index >= len(self.coverage_history) - 1:
+            return
+        self._save_current_form_to_history()
+        self.coverage_history_index += 1
+        self._load_history_item(self.coverage_history_index)
+
+    def _save_current_form_to_history(self):
+
+        if 0 <= self.coverage_history_index < len(self.coverage_history):
+            tc_data = self._read_cov_form()
+            self.coverage_history[self.coverage_history_index]["tc_data"] = tc_data
+
+    def _load_history_item(self, index: int):
+        item = self.coverage_history[index]
+        self.coverage_current_bug_id = item["tc_data"].get("bug_id", "NA")
+        self._fill_cov_form(item["tc_data"])
+        self.coverage_save_btn.config(state="normal")
+        self._set_status_coverage(f"'{item['point']}' 항목을 보고 있습니다. (수정 후 다시 저장 가능)")
+        self._refresh_coverage_nav()
+
+    def _refresh_coverage_nav(self):
+        total = len(self.coverage_history)
+        idx = self.coverage_history_index
+        if total == 0:
+            self.coverage_history_label.config(text="")
+            self.coverage_prev_btn.config(state="disabled")
+            self.coverage_next_history_btn.config(state="disabled")
+            return
+
+        self.coverage_history_label.config(text=f"{idx + 1} / {total}  -  {self.coverage_history[idx]['point']}")
+        self.coverage_prev_btn.config(state="normal" if idx > 0 else "disabled")
+        self.coverage_next_history_btn.config(state="normal" if idx < total - 1 else "disabled")
 
     def _clear_coverage_form(self):
         self.cov_field_category.set("")
@@ -975,15 +1045,19 @@ class TestCaseGeneratorApp:
         self.coverage_status.config(text=text)
 
     def receive_bug_report_for_coverage(self, text: str):
-        """Yona 탭 등 다른 곳에서 텍스트를 이 탭으로 보낼 때 사용."""
+
         self.coverage_input.delete("1.0", "end")
         self.coverage_input.insert("1.0", text)
         self._clear_coverage_checklist()
         self._clear_coverage_form()
         self.coverage_missing_queue = []
+        self.coverage_history = []
+        self.coverage_history_index = -1
+        self._refresh_coverage_nav()
         self.coverage_gen_btn.config(state="disabled")
         self.coverage_save_btn.config(state="disabled")
         self._set_status_coverage("Yona에서 가져온 내용이 입력되었습니다. '커버리지 분석'을 눌러주세요.")
+
 
 def main():
     root = tk.Tk()

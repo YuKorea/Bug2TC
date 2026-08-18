@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -34,13 +33,13 @@ RESPONSE_SCHEMA = {
         "precondition": {
             "type": "string",
             "description": "테스트 시작 전에 만족되어 있어야 하는 상태. 절대 빈 문자열로 두지 말 것. "
-                            "버그 리포트에 명시적으로 없으면 재현 스텝/맥락에서 합리적으로 추론해서 채우고, "
-                            "정말 해당하는 사전 조건이 없으면 '특별한 사전 조건 없음'이라고 명시적으로 씀.",
+                           "버그 리포트에 명시적으로 없으면 재현 스텝/맥락에서 합리적으로 추론해서 채우고, "
+                           "정말 해당하는 사전 조건이 없으면 '특별한 사전 조건 없음'이라고 명시적으로 씀.",
         },
         "input_value": {
             "type": "string",
             "description": "실제로 입력하는 값 (구체적으로). 절대 빈 문자열로 두지 말 것. "
-                            "이 버그가 특정 입력값이 아니라 상태/UI 갱신 문제라면 '해당 없음'이라고 명시적으로 씀.",
+                           "이 버그가 특정 입력값이 아니라 상태/UI 갱신 문제라면 '해당 없음'이라고 명시적으로 씀.",
         },
         "steps": {
             "type": "array",
@@ -72,11 +71,27 @@ Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 �
             (버그 증상을 마치 사실처럼 서술 - 이렇게 쓰지 않음)
    좋은 예: "잘못된 Excel 파일 형식으로 도메인 가져오기 차단 확인"
             (무엇을 검증하는지, 확인/검증 목적이 분명하게 드러남)
-3. steps는 실제 재현 가능한 조작 순서로, 버그 리포트의 '재현 스텝'을 테스트 절차로 다듬어서 작성합니다.
-4. expected는 버그 리포트의 '기대 결과'를 근거로 작성하되, 테스트가 통과/실패를 판단할 수 있도록 검증 가능한 문장으로 씁니다.
-5. 버그 리포트에 여러 개의 검증 포인트가 섞여 있으면(예: 케이스 A + 케이스 B), 이번 호출에서는 가장 핵심적인 시나리오 하나만 골라 하나의 테스트케이스로 작성합니다.
-6. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
-7. precondition과 input_value는 절대 빈 문자열로 두지 않되, 절대 구체적인 사실을 지어내지 않습니다.
+3. **steps는 사용자가 수행하는 중립적인 "조작"만 담습니다.** 버그의 증상(에러 메시지 발생,
+   화면이 멈춤 등)을 단계 중간에 확인 항목처럼 끼워넣지 않습니다. "증상이 발생하는지/안 하는지"는
+   steps가 아니라 expected에서 다룹니다.
+   나쁜 예 (steps): "1. 검색창 클릭  2. 1글자 입력  3. 즉시 하단 빨간 에러 메시지 발생 확인  4. reload 클릭"
+   좋은 예 (steps): "1. 검색창 클릭  2. 1글자 입력  3. 화면 상태 확인"
+   (3번은 "에러가 뜨는지 확인"이 아니라 그냥 "상태를 본다"는 중립적 조작이고,
+    실제 판단 기준은 expected에 "크래시 상태로 전환되지 않아야 함"으로 들어감)
+4. **이 테스트케이스가 검증하는 목적은 하나로 좁힙니다.** scenario_hint(또는 버그 리포트의 핵심
+   시나리오)가 가리키는 딱 하나의 관심사만 검증합니다. 힌트에 없는 별개의 관심사를 steps나
+   expected에 억지로 끼워넣지 않습니다.
+   예: 버그 리포트에 "1글자 입력 시 크래시"와 "reload해도 복구 안 됨"이 같이 적혀 있어도,
+   이번 시나리오가 "1글자 입력 시 정상 동작"이면 reload 관련 조작/검증은 이 TC에 넣지 않습니다.
+   (reload 복구는 별개 시나리오이므로, 그건 다른 호출에서 별도 테스트케이스로 다룹니다)
+5. expected는 버그 리포트의 '기대 결과'를 근거로 작성하되, **이번 시나리오 하나의 판단 기준만**
+   검증 가능한 문장으로 씁니다. 서로 다른 검증 포인트(예: 크래시 미발생 + validation 메시지 +
+   reload 복구)를 한 expected에 전부 나열하지 않습니다 - 그중 이번 시나리오에 해당하는 것만 씁니다.
+6. category는 "테스트케이스", "QA 테스트케이스", "버그" 같은 의미 없는 이름을 쓰지 않습니다.
+   버그가 실제로 발생한 화면/기능 이름을 씁니다 (예: "BP모델", "도메인 관리", "엔터티 관계").
+7. 버그 리포트에 여러 개의 검증 포인트가 섞여 있으면(예: 케이스 A + 케이스 B), 이번 호출에서는 가장 핵심적인 시나리오 하나만 골라 하나의 테스트케이스로 작성합니다.
+8. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
+9. precondition과 input_value는 절대 빈 문자열로 두지 않되, 절대 구체적인 사실을 지어내지 않습니다.
    - precondition: steps의 1번째 스텝 "이전"의 상태만 기술합니다. steps에서 나중에 수행할 행동
      (예: "엔터티를 생성한다"가 1번 스텝이면, "엔터티가 이미 생성되어 있는 상태"라고 미리 있다고
      쓰면 안 됨 - 논리적으로 모순됩니다)을 사전조건에 이미 완료된 것처럼 쓰지 않습니다.
@@ -86,27 +101,9 @@ Yona BTS에 등록된 버그 리포트를 받아서, 회사 테스트케이스 �
      사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
    - input_value: 이 버그가 특정 텍스트/숫자 입력값을 검증하는 게 아니라 UI 상태나 화면 갱신 문제라면,
      "해당 없음"이라고 명시적으로 씁니다. 빈 문자열로 남기지 않습니다.
-8. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
-9. 모든 필드는 한국어로 작성합니다. 모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
-    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
-    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다.
-10.expected에는 "실제 결과"를 절대로 작성하지 않습니다.
-    테스트케이스의 expected는 반드시 버그 리포트의 "기대 결과"를 기준으로 작성합니다.
-
-    예를 들어 버그 리포트가:
-    - 실제 결과: 공백 입력이 저장됨
-    - 기대 결과: 공백 입력은 저장되지 않아야 함
-
-    이라면 expected는 반드시:
-    "공백 입력 후 저장되지 않아야 함."
-    와 같이 작성해야 합니다.
-
-    "공백 입력이 저장되어야 함"처럼 현재 버그 증상을
-    정상 동작으로 기술하면 안 됩니다.
-
-11. 테스트케이스는 "버그가 재현되는지"가 아니라
-    "버그가 수정되었는지/요구사항대로 동작하는지"를 검증하는 방향으로 작성합니다.
-"""
+10. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도, 그건 첨부파일 이름일 뿐이므로 테스트케이스 내용으로 사용하지 않습니다.
+11. 모든 필드는 한국어로만 작성합니다. 중국어(한자)나 영어 단어를 섞어 쓰지 않습니다
+    (FK, UI, API 같은 이미 굳어진 관용 약어는 예외적으로 허용됩니다)."""
 
 MULTI_SYSTEM_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이스를 작성하는 시니어 QA 엔지니어입니다.
 Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 서로 다른 검증 시나리오를 모두 찾아내고,
@@ -122,20 +119,25 @@ Yona BTS에 등록된 버그 리포트를 받아서, 그 안에 섞여 있는 �
    드러나야 합니다. 버그 리포트 제목을 그대로 복사하지 말고 검증 목적 중심으로 다시 씁니다.
    나쁜 예: "잘못된 파일 형식으로 도메인 가져오기 시스템이 성공적으로 처리됨"
    좋은 예: "잘못된 Excel 파일 형식으로 도메인 가져오기 차단 확인"
-6. steps는 실제 재현 가능한 조작 순서로 작성합니다.
-7. expected는 버그 리포트의 '기대 결과'를 근거로, 통과/실패를 판단할 수 있는 검증 가능한 문장으로 씁니다.
-8. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
-9. precondition과 input_value는 절대 빈 문자열로 두지 않되, 절대 구체적인 사실을 지어내지 않습니다.
+6. **steps는 사용자가 수행하는 중립적인 "조작"만 담습니다.** 버그의 증상(에러 발생, 화면 멈춤 등)을
+   단계 중간에 확인 항목처럼 끼워넣지 않습니다. 증상 발생 여부는 steps가 아니라 expected에서 다룹니다.
+7. **각 시나리오는 자신의 검증 목적 하나에만 집중합니다.** 예: "1글자 입력 시 크래시 방지"
+   시나리오와 "reload 후 복구" 시나리오는 서로 다른 관심사이므로 별개 배열 항목으로 나누고,
+   한쪽의 조작/검증 내용을 다른 쪽에 섞지 않습니다.
+8. expected는 버그 리포트의 '기대 결과'를 근거로, **그 시나리오 하나의 판단 기준만** 검증
+   가능한 문장으로 씁니다. 서로 다른 검증 포인트를 한 expected에 전부 나열하지 않습니다.
+9. category는 "테스트케이스", "QA 테스트케이스", "버그" 같은 의미 없는 이름을 쓰지 않습니다.
+   버그가 실제로 발생한 화면/기능 이름을 씁니다 (예: "BP모델", "도메인 관리").
+10. purpose와 expected에 추측이나 과장된 표현을 넣지 않습니다. 버그 리포트에 없는 내용을 지어내지 않습니다.
+11. precondition과 input_value는 절대 빈 문자열로 두지 않되, 절대 구체적인 사실을 지어내지 않습니다.
    - precondition: steps의 1번째 스텝 이전의 상태만 기술합니다. steps에서 나중에 수행할 행동을
      이미 완료된 것처럼 미리 쓰지 않습니다(논리적 모순). 버그 리포트에 없는 파일명/프로젝트명 등을
      그럴듯하게 지어내지 말고, 실제로 확인 가능한 만큼만 일반적인 수준으로 씁니다.
      정말 필요한 사전 조건이 없으면 "특별한 사전 조건 없음"이라고 명시적으로 씁니다.
    - input_value: 특정 입력값이 아니라 UI 상태/화면 갱신 문제라면 "해당 없음"이라고 명시적으로 씁니다.
-10. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
-11. 모든 필드는 한국어로 작성합니다. 모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
-    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
-    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다.
-"""
+12. 버그 리포트에 첨부된 이미지/영상 파일명(예: .png, .mp4)이 텍스트로 섞여 있어도 테스트케이스 내용으로 사용하지 않습니다.
+13. 모든 필드는 한국어로만 작성합니다. 중국어(한자)나 영어 단어를 섞어 쓰지 않습니다
+    (FK, UI, API 같은 이미 굳어진 관용 약어는 예외적으로 허용됩니다)."""
 
 MULTI_RESPONSE_SCHEMA = {
     "type": "object",
@@ -148,7 +150,6 @@ MULTI_RESPONSE_SCHEMA = {
     },
     "required": ["scenarios"],
 }
-
 
 
 COVERAGE_SCHEMA = {
@@ -184,11 +185,19 @@ COVERAGE_PROMPT = f"""당신은 {PRODUCT_NAME}의 시니어 QA 엔지니어입�
    제안하는 작업이 아닙니다.
 2. 재현 스텝 안에 여러 개의 서로 다른 입력/조건이 섞여 있으면 각각을 별도 포인트로 나눕니다.
    예: "공백 입력 시 저장됨 / 중복 이름도 저장됨 / 특수문자도 저장됨" -> 3개 포인트
-3. "기존에 작성된 테스트케이스" 목록이 주어지면, 그 제목/목적에 해당 포인트가 실질적으로
+3. **성격이 다른 검증 관심사는 반드시 별개 포인트로 분리합니다.** 특히 "문제가 애초에
+   발생하지 않아야 한다"는 관심사와 "문제가 발생한 뒤 복구/재시도가 되어야 한다"는 관심사는
+   전혀 다른 테스트이므로 절대 하나로 합치지 않습니다.
+   예: "1글자 입력 시 크래시 발생, reload해도 복구 안 됨"이라는 버그라면
+   -> "1글자 입력 시 정상 동작" (크래시 미발생 자체를 검증)
+   -> "오류 후 reload 복구" (별도의 복구 시나리오)
+   이렇게 최소 2개의 서로 다른 포인트로 나눕니다.
+4. "기존에 작성된 테스트케이스" 목록이 주어지면, 그 제목/목적에 해당 포인트가 실질적으로
    반영되어 있으면 covered=true, 아니면 covered=false로 표시합니다.
    목록이 아예 없으면 모든 포인트를 covered=false로 표시합니다.
-4. 각 포인트는 2~6단어의 짧은 한국어 명사구로 표현합니다 (예: "공백 입력", "최대 길이 초과").
-5. 버그 리포트에 실제로 있는 포인트만 다루므로, 억지로 개수를 맞추지 않습니다."""
+5. 각 포인트는 2~6단어의 짧은 한국어 명사구로 표현합니다 (예: "공백 입력", "최대 길이 초과").
+6. 버그 리포트에 실제로 있는 포인트만 다루므로, 억지로 개수를 맞추지 않습니다.
+7. 모든 포인트는 한국어로만 작성합니다. 중국어(한자)나 영어를 섞지 않습니다."""
 
 
 def analyze_bug_coverage(bug_report_text: str, existing_tc_summaries: list = None) -> list:
@@ -230,9 +239,11 @@ def analyze_bug_coverage(bug_report_text: str, existing_tc_summaries: list = Non
     if not points:
         raise ValueError(f"모델이 검증 포인트를 하나도 추출하지 못했습니다.\n응답: {parsed}")
 
+    for p in points:
+        if "point" in p:
+            p["point"] = _remove_chinese_chars(p["point"])
+
     return points
-
-
 
 
 NEGATIVE_ANALYSIS_SCHEMA = {
@@ -272,9 +283,7 @@ QA가 일반적으로 점검해야 하는 표준 테스트 시나리오 체크�
    covered=true로 표시합니다 (표현이 달라도 의미가 같으면 커버된 것으로 봄).
 5. 나머지는 covered=false로 표시합니다 (= 빠진 시나리오, 이게 이 기능의 핵심 목적입니다).
 6. 5개~10개 사이 항목을 제안합니다.
-7. 각 scenario는 2~6단어의 짧은 한국어 명사구로 씁니다.모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
-    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
-    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다."""
+7. 각 scenario는 2~6단어의 짧은 한국어 명사구로 씁니다."""
 
 
 def analyze_negative_tests(reference_tc_text: str, existing_titles: list = None) -> list:
@@ -326,9 +335,7 @@ NEGATIVE_GENERATION_PROMPT = f"""당신은 {PRODUCT_NAME}의 QA 테스트케이�
    해당 없으면 "해당 없음"/"특별한 사전 조건 없음"이라고 명시적으로 씁니다.
 4. 기존 테스트케이스에 없는 사실을 근거 없이 지어내지는 않되, 이 시나리오 자체가 요구하는
    일반적인 QA 테스트 설계 지식(경계값, 특수문자 등 표준 기법)은 활용해도 됩니다.
-5. 모든 필드는 한국어로 작성합니다.모든 필드에서 존댓말이나 완전한 문장형 종결을 사용하지 않습니다.
-    문장 종결은 가능한 한 "~함", "~확인", "~검증", "~차단", "~저장되지 않음",
-    "~표시됨", "~표시되지 않음" 등의 간결한 형태를 사용합니다."""
+5. 모든 필드는 한국어로 작성합니다."""
 
 
 def generate_negative_test_case(reference_tc_text: str, scenario_hint: str) -> dict:
@@ -368,6 +375,7 @@ def generate_negative_test_case(reference_tc_text: str, scenario_hint: str) -> d
 
     tc_data = _fill_blank_fields(tc_data)
     tc_data = _strip_bug_number_from_title(tc_data)
+    tc_data = _strip_chinese_from_tc(tc_data)
     tc_data["bug_id"] = _extract_bug_id(reference_tc_text)
     return tc_data
 
@@ -382,7 +390,7 @@ def _extract_bug_id(bug_report_text: str) -> str:
 
 
 def _fill_blank_fields(tc_data: dict) -> dict:
-
+    """모델이 프롬프트 지시를 놓쳐서 precondition/input_value를 빈 문자열로 남긴 경우를 위한 안전장치."""
     if not tc_data.get("precondition", "").strip():
         tc_data["precondition"] = "특별한 사전 조건 없음"
     if not tc_data.get("input_value", "").strip():
@@ -396,6 +404,28 @@ def _strip_bug_number_from_title(tc_data: dict) -> dict:
     cleaned = re.sub(r"^\s*\d{2,6}\s*[\.\)]?\s*", "", title).strip()
     if cleaned:
         tc_data["title"] = cleaned
+    return tc_data
+
+
+_CJK_HAN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")  # 한자(중국어) 범위. 한글(\uac00-\ud7a3)과 안 겹침
+
+
+def _remove_chinese_chars(text: str) -> str:
+
+    if not text:
+        return text
+    cleaned = _CJK_HAN_PATTERN.sub("", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+def _strip_chinese_from_tc(tc_data: dict) -> dict:
+
+    for key in ("category", "title", "purpose", "precondition", "input_value", "expected"):
+        if key in tc_data and isinstance(tc_data[key], str):
+            tc_data[key] = _remove_chinese_chars(tc_data[key])
+    if "steps" in tc_data and isinstance(tc_data["steps"], list):
+        tc_data["steps"] = [_remove_chinese_chars(s) for s in tc_data["steps"]]
     return tc_data
 
 
@@ -419,7 +449,7 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
                 {"role": "user", "content": user_content},
             ],
             format=RESPONSE_SCHEMA,
-            options={"temperature": 0.2},
+            options={"temperature": 0.2},  # 테스트케이스는 일관성이 중요하므로 낮게 설정
         )
     except Exception as e:
         raise RuntimeError(
@@ -448,6 +478,7 @@ def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
 
     tc_data = _fill_blank_fields(tc_data)
     tc_data = _strip_bug_number_from_title(tc_data)
+    tc_data = _strip_chinese_from_tc(tc_data)
     tc_data["bug_id"] = _extract_bug_id(bug_report_text)
     return tc_data
 
@@ -508,6 +539,7 @@ def generate_test_cases_multi(bug_report_text: str) -> list:
             )
         tc_data = _fill_blank_fields(tc_data)
         tc_data = _strip_bug_number_from_title(tc_data)
+        tc_data = _strip_chinese_from_tc(tc_data)
         tc_data["bug_id"] = bug_id
         result.append(tc_data)
 
@@ -515,7 +547,7 @@ def generate_test_cases_multi(bug_report_text: str) -> list:
 
 
 if __name__ == "__main__":
-
+    # 실제 로컬 모델 호출 테스트 (Ollama가 실행 중이고 모델이 받아져 있어야 동작)
     sample_bug = """
 제목: 298 도메인명 공백 입력 및 Trim 미처리로 인한 중복 등록 가능 버그
 
