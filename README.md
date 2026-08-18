@@ -172,8 +172,8 @@ Available as both a CLI (`main.py`) and a GUI (`gui.py`). The GUI can be package
                         │      CLI / GUI    │
                         └─────────┬─────────┘
                                   │
-                 ┌────────────────┼────────────────┐
-                 │                                 │
+                      ┌─────────────┼───────────────┐
+                      │                             │
            Get a bug report                  Test Case → Bug
                  │                                  │
      ┌───────────┼───────────┐                      │
