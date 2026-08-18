@@ -14,24 +14,24 @@ CLI(`main.py`)와 GUI(`gui.py`) 두 가지로 쓸 수 있고, GUI는 Windows `.e
                         └─────────┬─────────┘
                                   │
                  ┌────────────────┼────────────────┐
-                 │                                  │
+                 │                                 │
           버그 리포트 확보                      테스트케이스 → 버그
                  │                                  │
      ┌───────────┼───────────┐                      │
      │           │           │                      │
-  직접 붙여넣기  Yona 조회   버그 리포트 작성            │
-              (yona_client)  (bug_report_generator)   │
+  직접 붙여넣기  Yona 조회   버그 리포트 작성             │
+              (yona_client)  (bug_report_generator) │
      │           │           │                      │
      └───────────┴─────┬─────┘                      │
                         ↓                            ↓
               ai_client.py                 bug_report_generator.py
-        (테스트케이스 생성 /                          │
-         커버리지 분석)                                │
-                        │                            │
-                        │   ←── excel_writer.py       │
-                        │      (기존 TC 조회·대조)      │
-                        │                            │
-                        └──────────┬─────────────────┘
+        (테스트케이스 생성 /                           │
+         커버리지 분석)                               │
+                   │                                │
+                   │     ←── excel_writer.py        │
+                   │      (기존 TC 조회·대조)         │
+                   │                                │
+                   └──────────┬─────────────────────┘
                                    ↓
                              Ollama / Qwen 2.5
                                    │
@@ -173,24 +173,24 @@ Available as both a CLI (`main.py`) and a GUI (`gui.py`). The GUI can be package
                         └─────────┬─────────┘
                                   │
                  ┌────────────────┼────────────────┐
-                 │                                  │
-           Get a bug report                  Test Case → Bug
+                 │                                 │
+          버그 리포트 확보                      테스트케이스 → 버그
                  │                                  │
      ┌───────────┼───────────┐                      │
      │           │           │                      │
-  Paste it   Yona lookup  Author bug report          │
-              (yona_client)  (bug_report_generator)   │
+  직접 붙여넣기  Yona 조회   버그 리포트 작성             │
+              (yona_client)  (bug_report_generator) │
      │           │           │                      │
      └───────────┴─────┬─────┘                      │
                         ↓                            ↓
               ai_client.py                 bug_report_generator.py
-        (test case generation /                      │
-         coverage analysis)                           │
-                        │                            │
-                        │   ←── excel_writer.py       │
-                        │      (reads/compares TCs)   │
-                        │                            │
-                        └──────────┬─────────────────┘
+        (테스트케이스 생성 /                           │
+         커버리지 분석)                               │
+                   │                                │
+                   │     ←── excel_writer.py        │
+                   │      (기존 TC 조회·대조)         │
+                   │                                │
+                   └──────────┬─────────────────────┘
                                    ↓
                              Ollama / Qwen 2.5
                                    │
@@ -200,8 +200,9 @@ Available as both a CLI (`main.py`) and a GUI (`gui.py`). The GUI can be package
                      ┌─────────────┴─────────────┐
                      ↓                           ↓
               excel_writer.py               Text Output
-              (testcase.xlsx)              (bug report / .txt)
+              (testcase.xlsx)             (버그 리포트 / .txt)
 ```
+
 
 ---
 
