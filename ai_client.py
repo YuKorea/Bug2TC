@@ -407,7 +407,7 @@ def _strip_bug_number_from_title(tc_data: dict) -> dict:
     return tc_data
 
 
-_CJK_HAN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")  # 한자(중국어) 범위. 한글(\uac00-\ud7a3)과 안 겹침
+_CJK_HAN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")
 
 
 def _remove_chinese_chars(text: str) -> str:
@@ -569,7 +569,7 @@ trim 결과가 빈값이면 저장 불가 처리되어야 함
 앞뒤 공백이 제거되지 않고 그대로 저장됨
 
 5.버전 정보
-v 3.0.17.3
+v1.0
 """
     result = generate_test_case(sample_bug, scenario_hint="공백만 입력하는 케이스만")
     print(json.dumps(result, ensure_ascii=False, indent=2))
