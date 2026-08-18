@@ -39,6 +39,7 @@ class TestCaseGeneratorApp:
         self.root.title("AI 기반 Test Case Generator")
         self.root.geometry("1000x900")
 
+
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("TNotebook.Tab", padding=[14, 8])
@@ -62,6 +63,7 @@ class TestCaseGeneratorApp:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # 탭 순서: Yona조회 / 버그 작성 -> (둘 다 "버그 리포트를 만드는 방법") -> 버그->TC -> TC->버그 -> 커버리지
         tab_yona = ttk.Frame(self.notebook, padding=10)
         tab_author = ttk.Frame(self.notebook, padding=10)
         tab_forward = ttk.Frame(self.notebook, padding=10)
@@ -231,8 +233,8 @@ class TestCaseGeneratorApp:
         ttk.Label(main, text="Yona 버그 리포트 (제목, 버그 설명, 재현 스텝, 기대 결과 등 통째로 붙여넣기)").pack(
             anchor="w"
         )
-        self.bug_input = tk.Text(main, height=22, wrap="word")
-        self.bug_input.pack(fill="both", expand=False, pady=(2, 8))
+        self.bug_input = tk.Text(main, height=16, wrap="word")
+        self.bug_input.pack(fill="both", expand=True,pady=(2, 8))
 
         hint_frame = ttk.Frame(main)
         hint_frame.pack(fill="x", pady=(0, 8))
@@ -737,7 +739,7 @@ class TestCaseGeneratorApp:
         ).pack(anchor="w", pady=(0, 8))
 
         # 버그 리포트 입력창: 창을 늘리면 같이 커지도록 expand=True
-        self.coverage_input = tk.Text(main, height=16, wrap="word")
+        self.coverage_input = tk.Text(main, height=14, wrap="word")
         self.coverage_input.pack(fill="both", expand=True, pady=(0, 8))
 
         action_frame = ttk.Frame(main)
@@ -765,7 +767,7 @@ class TestCaseGeneratorApp:
         self.coverage_progress_label = ttk.Label(queue_frame, text="", foreground="#555555")
         self.coverage_progress_label.pack(side="left", padx=12)
 
-
+        # 이전/다음 항목 다시 보기 (분석 다시 안 돌리고, 이번 세션에서 만든 것들 왔다갔다)
         nav_frame = ttk.Frame(main)
         nav_frame.pack(fill="x", pady=(0, 6))
         self.coverage_prev_btn = ttk.Button(
@@ -779,7 +781,7 @@ class TestCaseGeneratorApp:
         self.coverage_history_label = ttk.Label(nav_frame, text="", foreground="#555555")
         self.coverage_history_label.pack(side="left", padx=12)
 
-
+        # 결과 편집 폼: 필요한 만큼만 차지하도록 expand=False (남는 공백 방지)
         form = ttk.LabelFrame(main, text="생성된 테스트케이스 (직접 수정 후 저장 가능)")
         form.pack(fill="x", expand=False, pady=(4, 8))
 
@@ -795,7 +797,7 @@ class TestCaseGeneratorApp:
         self.cov_field_purpose = self._add_field_row(form, "테스트 목적:", height=2)
         self.cov_field_precondition = self._add_field_row(form, "사전 조건:", height=2)
         self.cov_field_input_value = self._add_field_row(form, "입력값:", height=2)
-        self.cov_field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=6)
+        self.cov_field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=4)
         self.cov_field_expected = self._add_field_row(form, "기대결과:", height=2)
 
         self.coverage_save_btn = ttk.Button(
@@ -803,7 +805,7 @@ class TestCaseGeneratorApp:
         )
         self.coverage_save_btn.pack(anchor="e")
 
-
+        # 내부 상태: 이번 세션에서 생성한 항목들의 히스토리 (뒤로/앞으로 다시 보기용)
         self.coverage_history = []  # [{"point": str, "tc_data": dict}, ...]
         self.coverage_history_index = -1
 
@@ -931,7 +933,7 @@ class TestCaseGeneratorApp:
         )
         self.coverage_save_btn.config(state="normal")
 
-
+        # 히스토리에 추가하고, 방금 만든 걸 현재 위치로 이동
         self.coverage_history.append({"point": scenario, "tc_data": dict(tc_data)})
         self.coverage_history_index = len(self.coverage_history) - 1
         self._refresh_coverage_nav()
@@ -957,7 +959,7 @@ class TestCaseGeneratorApp:
         tc_data = self._read_cov_form()
         tc_data["bug_id"] = self.coverage_current_bug_id
 
-
+        # 지금 보고 있는 게 히스토리의 항목이면, 수정한 내용을 히스토리에도 반영
         if 0 <= self.coverage_history_index < len(self.coverage_history):
             self.coverage_history[self.coverage_history_index]["tc_data"] = dict(tc_data)
 
@@ -985,7 +987,7 @@ class TestCaseGeneratorApp:
         self._load_history_item(self.coverage_history_index)
 
     def _save_current_form_to_history(self):
-
+        """이전/다음으로 넘어가기 전에, 지금 폼에서 수정 중이던 내용을 잃지 않게 히스토리에 반영."""
         if 0 <= self.coverage_history_index < len(self.coverage_history):
             tc_data = self._read_cov_form()
             self.coverage_history[self.coverage_history_index]["tc_data"] = tc_data
@@ -1045,7 +1047,7 @@ class TestCaseGeneratorApp:
         self.coverage_status.config(text=text)
 
     def receive_bug_report_for_coverage(self, text: str):
-
+        """Yona 탭 등 다른 곳에서 텍스트를 이 탭으로 보낼 때 사용."""
         self.coverage_input.delete("1.0", "end")
         self.coverage_input.insert("1.0", text)
         self._clear_coverage_checklist()
@@ -1057,7 +1059,6 @@ class TestCaseGeneratorApp:
         self.coverage_gen_btn.config(state="disabled")
         self.coverage_save_btn.config(state="disabled")
         self._set_status_coverage("Yona에서 가져온 내용이 입력되었습니다. '커버리지 분석'을 눌러주세요.")
-
 
 def main():
     root = tk.Tk()
