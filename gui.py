@@ -95,7 +95,7 @@ class TestCaseGeneratorApp:
             text="버그를 편하게 서술하면, 아래 표준 양식(제목/버그설명/재현스텝/기대결과/실제결과/버전정보)으로 정리해드립니다.",
         ).pack(anchor="w", pady=(0, 8))
 
-        self.author_input = tk.Text(main, height=10, wrap="word")
+        self.author_input = tk.Text(main, height=15, wrap="word")
         self.author_input.pack(fill="both", expand=False, pady=(0, 8))
 
         action_frame = ttk.Frame(main)
@@ -108,7 +108,7 @@ class TestCaseGeneratorApp:
         self.author_status.pack(side="left", padx=12)
 
         ttk.Label(main, text="정리된 버그 리포트 (직접 수정 후 사용 가능)").pack(anchor="w")
-        self.author_preview = tk.Text(main, height=16, wrap="word")
+        self.author_preview = tk.Text(main, height=11, wrap="word")
         self.author_preview.pack(fill="both", expand=True, pady=(2, 8))
 
         btn_frame = ttk.Frame(main)
@@ -231,7 +231,7 @@ class TestCaseGeneratorApp:
         ttk.Label(main, text="Yona 버그 리포트 (제목, 버그 설명, 재현 스텝, 기대 결과 등 통째로 붙여넣기)").pack(
             anchor="w"
         )
-        self.bug_input = tk.Text(main, height=16, wrap="word")
+        self.bug_input = tk.Text(main, height=22, wrap="word")
         self.bug_input.pack(fill="both", expand=False, pady=(2, 8))
 
         hint_frame = ttk.Frame(main)
@@ -269,7 +269,7 @@ class TestCaseGeneratorApp:
         self.field_purpose = self._add_field_row(form, "테스트 목적:", height=2)
         self.field_precondition = self._add_field_row(form, "사전 조건:", height=2)
         self.field_input_value = self._add_field_row(form, "입력값:", height=2)
-        self.field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=5)
+        self.field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=6)
         self.field_expected = self._add_field_row(form, "기대결과:", height=3)
 
         self.save_btn = ttk.Button(
@@ -728,7 +728,7 @@ class TestCaseGeneratorApp:
         self.reverse_status_label.config(text=text)
 
     # ==================================================================
-    # 탭 4: 테스트 시나리오 커버리지 분석
+    # 탭 4: 커버리지 분석
     # ==================================================================
     def _build_coverage_tab(self, main):
         ttk.Label(
@@ -737,7 +737,7 @@ class TestCaseGeneratorApp:
         ).pack(anchor="w", pady=(0, 8))
 
         # 버그 리포트 입력창: 창을 늘리면 같이 커지도록 expand=True
-        self.coverage_input = tk.Text(main, height=14, wrap="word")
+        self.coverage_input = tk.Text(main, height=16, wrap="word")
         self.coverage_input.pack(fill="both", expand=True, pady=(0, 8))
 
         action_frame = ttk.Frame(main)
@@ -795,7 +795,7 @@ class TestCaseGeneratorApp:
         self.cov_field_purpose = self._add_field_row(form, "테스트 목적:", height=2)
         self.cov_field_precondition = self._add_field_row(form, "사전 조건:", height=2)
         self.cov_field_input_value = self._add_field_row(form, "입력값:", height=2)
-        self.cov_field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=4)
+        self.cov_field_steps = self._add_field_row(form, "테스트 절차 (한 줄에 하나씩):", height=6)
         self.cov_field_expected = self._add_field_row(form, "기대결과:", height=2)
 
         self.coverage_save_btn = ttk.Button(
