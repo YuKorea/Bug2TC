@@ -12,3 +12,6 @@ dist/
 
 .pytest_cache/
 *.xlsx
+
+.venv-ci/
+reports/
