@@ -109,7 +109,14 @@ def fetch_issue(issue_number, owner: str = None, project: str = None) -> dict:
     except requests.exceptions.HTTPError as e:
         raise RuntimeError(f"Yona 요청 실패 (상태 코드 {response.status_code}): {e}") from e
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError as e:
+        raise RuntimeError(
+            "Yona 응답이 JSON 형식이 아닙니다. 접속 주소(YONA_BASE_URL)와 "
+            "프록시/로그인 페이지 여부를 확인해주세요."
+        ) from e
+
     result = data.get("result", data)
     if not result or "title" not in result:
         raise RuntimeError(f"예상치 못한 응답 형식입니다: {data}")
