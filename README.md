@@ -146,6 +146,10 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 | `excel_writer.py` | Excel 생성/저장/TC_ID 채번/유사도 비교 |
 | `paths.py` | 바탕화면 경로, 영구 설정 폴더(`%APPDATA%`) 탐지 |
 | `icon.ico` | exe 아이콘 |
+| `tests/` | pytest 단위 테스트 |
+| `Jenkinsfile` | Jenkins 파이프라인 정의 |
+| `docker/` | Jenkins 실행 환경 (Dockerfile, compose) |
+| `pytest.ini`, `requirements-dev.txt` | 테스트 설정과 개발용 의존성 |
 
 ## Excel 컬럼
 
@@ -159,9 +163,105 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 - GUI는 다중 시나리오 추출을 지원하지 않습니다 (CLI 전용).
 - 중복 경고는 참고용이며 저장을 막지 않습니다.
 
+## CI/CD (Jenkins)
+
+Docker 기반 Jenkins로 테스트 자동화 파이프라인을 구축했습니다. 저장소에 푸시하면 Jenkins가 변경을 감지해 테스트와 커버리지 측정을 자동 실행하고, 결과를 빌드 화면에 보관합니다.
+
+### 구성
+
+```
+GitHub (YuKorea/Bug2TC)
+        │  푸시
+        ▼
+Jenkins (Docker, Poll SCM)
+        │
+        ├─ Setup : 가상환경 신규 생성 → 의존성 설치
+        ├─ Test  : pytest + 커버리지 측정
+        └─ Post  : JUnit 결과 게시, 리포트 보관(htmlcov)
+```
+
+| 항목 | 내용 |
+|---|---|
+| Jenkins 실행 | Docker Compose (`docker/docker-compose.yml`) |
+| 이미지 | `jenkins/jenkins:lts-jdk21` 기반 + Python 설치 (`docker/Dockerfile`) |
+| 파이프라인 | 선언형 `Jenkinsfile` (저장소에서 직접 로드) |
+| 트리거 | Poll SCM (`H/2 * * * *`) |
+| 테스트 | pytest, pytest-cov (`requirements-dev.txt`) |
+| 실행 환경 | Linux, Python 3.13.5 |
+
+### 실행 방법
+
+```powershell
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml up -d
+```
+
+이후 `http://localhost:8080`에서 Jenkins 초기 설정을 마치고, Pipeline 작업의 SCM을 이 저장소와 `Jenkinsfile`로 지정합니다. 로컬 테스트는 다음과 같이 실행합니다.
+
+```powershell
+pip install -r requirements-dev.txt
+pytest -v
+```
+
+### 테스트 설계
+
+- `tests/conftest.py`가 설정 폴더(`%APPDATA%`)를 임시 경로로 돌려, 테스트가 실제 `.env`와 사용자 설정을 건드리지 않습니다.
+- 외부 의존성(Yona API)은 `requests.get`을 대체(mock)하여 정상, 401, 404, 연결 오류, 비JSON 응답을 재현합니다.
+- 매 빌드마다 가상환경을 삭제 후 새로 만들어, 이전 빌드의 잔여물이 결과에 영향을 주지 않도록 했습니다.
+
+### 빌드 이력
+
+| 빌드 | 결과 | 내용 |
+|---|---|---|
+| #1 | 실패 | 단위 테스트가 결함을 발견 (7건 중 1건 실패) |
+| #2 | 성공 | 결함 수정 후 8건 통과 |
+| #3 | 성공 | 푸시만으로 자동 시작됨을 확인 (`Started by an SCM change`) |
+| #4 | 성공 | 커버리지 측정과 리포트 보관 추가, 전체 27% |
+| #5 | 실패 | `yona_client` 테스트 추가, 결함 재현 (14건 중 1건 실패), 전체 34% |
+| #6 | 성공 | 결함 수정 후 14건 통과 |
+
+### 테스트로 발견하고 수정한 결함
+
+| 구분 | 증상 | 원인 | 조치 |
+|---|---|---|---|
+| 번호 제거 오류 | `3.14를 입력`이 `14를 입력`으로 변형 | 번호 제거 정규식이 소수점의 `3.`을 단계 번호로 오인 | 점 바로 뒤에 숫자가 오면 번호로 보지 않도록 정규식 수정, 회귀 테스트 추가 |
+| 비JSON 응답 미처리 | Yona가 JSON이 아닌 응답을 주면 `ValueError`가 그대로 노출 | `response.json()` 예외를 처리하지 않음 | `RuntimeError`로 변환하고 확인 안내 문구 추가 |
+
+### 구축 중 해결한 문제
+
+| 문제 | 원인 | 해결 |
+|---|---|---|
+| Docker Desktop 설치 불가 | Windows `Virtual Machine Platform` 기능이 꺼져 있어 관리자 권한 필요 | 관리자 PowerShell에서 `wsl --install` 후 재부팅, 전체 사용자 설치 |
+| Jenkins 플러그인 6개 설치 실패 | 하위 플러그인 3개의 설치 실패가 상위 플러그인 3개로 연쇄 (`Plugin is missing`) | 하위 플러그인을 먼저 재설치한 뒤 상위 플러그인 설치 |
+| 코어 취약점 및 Java 17 지원 종료 경고 | 이미지 버전이 오래됨 | `lts-jdk21`로 교체 후 플러그인 업데이트, 볼륨 유지로 설정 보존 |
+| 컨테이너에 Python 없음 | 기본 Jenkins 이미지에는 Python이 없음 | Dockerfile로 Python을 추가한 전용 이미지 구성 |
+| compose 파일 YAML 오류 | 들여쓰기 불일치 | 공백 2칸 단위로 정리, `docker compose config`로 문법 검증 |
+
+### 커버리지 현황
+
+전체 **34%** (빌드 #6 기준).
+
+| 모듈 | 커버리지 |
+|---|---|
+| `yona_client.py` | 63% |
+| `bug_report_generator.py` | 36% |
+| `paths.py` | 33% |
+| `ai_client.py` | 26% |
+| `excel_writer.py` | 24% |
+
+Ollama 호출, Excel 저장 경로 등은 아직 테스트가 닿지 않았으며, 다음 테스트 확대의 우선순위로 삼고 있습니다.
+
+### 제약 및 향후 과제
+
+- 로컬 Jenkins는 외부에서 접근할 수 없어 GitHub 웹훅 대신 Poll SCM을 사용합니다. PC와 Docker가 실행 중일 때만 동작합니다.
+- 현재 파이프라인은 Jenkins 컨트롤러에서 직접 빌드합니다. 보안 권고에 따라 빌드를 별도 에이전트로 분리하는 것이 향후 과제입니다.
+- Windows `.exe` 패키징(PyInstaller) 단계는 아직 파이프라인에 포함되어 있지 않습니다.
+- 빌드 실패 알림은 아직 설정하지 않았습니다.
+
+
 ## 기술 스택
 
-Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller
+Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller · pytest · Jenkins · Docker
 
 ---
 
@@ -318,9 +418,39 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 - Multi-scenario extraction is CLI-only.
 - The duplicate warning is advisory and never blocks saving.
 
+## CI/CD (Jenkins)
+
+A Docker-based Jenkins pipeline runs tests and coverage automatically whenever changes are pushed to this repository (Poll SCM, `H/2 * * * *`).
+
+- **Environment**: Docker Compose, `jenkins/jenkins:lts-jdk21` plus Python (`docker/Dockerfile`), Linux, Python 3.13.5
+- **Pipeline** (`Jenkinsfile`): Setup (fresh virtualenv per build) → Test (pytest + coverage) → Post (JUnit results, htmlcov artifacts)
+- **Test isolation**: `tests/conftest.py` redirects the config folder to a temp path; the Yona API is mocked to reproduce success, 401, 404, connection error, and non-JSON responses.
+
+### Build history
+
+| Build | Result | Note |
+|---|---|---|
+| #1 | Failed | Unit test exposed a defect (1 of 7 failed) |
+| #2 | Passed | 8 passed after the fix |
+| #3 | Passed | Confirmed automatic start on push |
+| #4 | Passed | Added coverage and artifacts, total 27% |
+| #5 | Failed | Added `yona_client` tests, reproduced a defect (1 of 14 failed), total 34% |
+| #6 | Passed | 14 passed after the fix |
+
+### Defects found by tests
+
+1. **Step-number stripping**: `3.14를 입력` was altered to `14를 입력` because the regex treated the decimal point as a step number. Fixed, with regression tests.
+2. **Non-JSON response**: a non-JSON reply from Yona surfaced a raw `ValueError`. It is now wrapped in a `RuntimeError` with guidance.
+
+### Limitations
+
+- Poll SCM is used instead of webhooks because the local Jenkins is not reachable from outside.
+- Builds currently run on the controller; separating them into an agent is a future task.
+- Windows `.exe` packaging and failure notifications are not yet part of the pipeline.
+
 ## Tech Stack
 
-Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller
+Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller · pytest · Jenkins · Docker
 
 ---
 
