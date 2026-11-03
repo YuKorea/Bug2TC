@@ -14,10 +14,17 @@ pipeline {
       }
     }
   }
-  post {
+    post {
     always {
       junit allowEmptyResults: true, testResults: 'reports/junit.xml'
       archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+    }
+    failure {
+      withCredentials([string(credentialsId: 'discord-webhook-url', variable: 'DISCORD_URL')]) {
+        sh '''curl -sS -o /dev/null -w "Discord HTTP %{http_code}\\n" -H "Content-Type: application/json" -d "{\\"content\\": \\"Build FAILED: ${JOB_NAME} #${BUILD_NUMBER} ${BUILD_URL}\\"}" "$DISCORD_URL" || echo "notification failed"'''
+      }
+    }
+  }
     }
   }
 }
