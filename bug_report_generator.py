@@ -232,8 +232,8 @@ def format_freeform_bug_report(fields: dict) -> str:
     cleaned_steps = [_strip_leading_number(s) for s in steps]
     steps_text = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(cleaned_steps))
 
-    actual = fields.get("actual", "").strip() or "(직접 입력 필요)"
-    version = fields.get("version", "").strip() or "(직접 입력 필요)"
+    actual = (fields.get("actual") or "").strip() or "(직접 입력 필요)"
+    version = (fields.get("version") or "").strip() or "(직접 입력 필요)"
 
     return f"""제목: {fields.get('title', '')}
 
