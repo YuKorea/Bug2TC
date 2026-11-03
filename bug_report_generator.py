@@ -104,7 +104,7 @@ def generate_bug_report_fields(tc_text: str) -> dict:
 
 def _strip_leading_number(text: str) -> str:
 
-    return re.sub(r"^\s*\d+\s*[\.\)]\s*", "", text).strip()
+    return re.sub(r"^\s*\d+\s*(?:\)|\.(?!\d))\s*", "", text).strip()
 
 
 def format_bug_report(fields: dict, actual_result: str, version: str) -> str:

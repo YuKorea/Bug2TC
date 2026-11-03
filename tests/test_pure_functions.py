@@ -23,6 +23,10 @@ def test_strip_leading_number_basic():
     assert _strip_leading_number("1. 검색창 클릭") == "검색창 클릭"
     assert _strip_leading_number("2) 값 입력") == "값 입력"
 
+def test_strip_leading_number_without_space():
+    assert _strip_leading_number("1.클릭") == "클릭"
+    assert _strip_leading_number("12.5kg 입력") == "12.5kg 입력"
+
 
 def test_strip_leading_number_keeps_decimal():
     # 의심 결함: "3.14"의 "3."을 번호로 오인해 지울 수 있음 (실패 예상)
