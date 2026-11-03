@@ -325,3 +325,5 @@ Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller
 ---
 
 YuPark · ypark.uk@gmail.com
+
+<!-- CI trigger test -->
