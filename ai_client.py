@@ -385,6 +385,9 @@ def _extract_bug_id(bug_report_text: str) -> str:
     match = re.search(r"TC_(\d+)", bug_report_text)
     if match:
         return match.group(1)
+    match = re.search(r"제목\s*:\s*(\d{2,6})\b", bug_report_text)
+    if match:
+        return match.group(1)
     match = re.search(r"\b(\d{2,6})\b", bug_report_text)
     return match.group(1) if match else "NA"
 
