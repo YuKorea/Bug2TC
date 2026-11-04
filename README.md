@@ -99,8 +99,8 @@ ollama run qwen2.5:7b   # 동작 확인, /bye로 종료
 **2) 프로젝트**
 ```powershell
 cd TCGenerator
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
@@ -163,9 +163,11 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 - GUI는 다중 시나리오 추출을 지원하지 않습니다 (CLI 전용).
 - 중복 경고는 참고용이며 저장을 막지 않습니다.
 
+---
+
 ## CI/CD (Jenkins)
 
-Docker 기반 Jenkins로 테스트 자동화 파이프라인을 구축했습니다. 저장소에 푸시하면 Jenkins가 변경을 감지해 테스트와 커버리지 측정을 자동 실행하고, 결과를 빌드 화면에 보관합니다.
+Docker 기반 Jenkins로 테스트 자동화 파이프라인을 구축했습니다. 저장소에 푸시하면 Jenkins가 변경을 감지해 테스트와 커버리지 측정을 자동 실행하고, 결과를 빌드 화면에 보관합니다. 빌드가 실패하면 Discord로 알림을 보냅니다.
 
 ### 구성
 
@@ -178,6 +180,7 @@ Jenkins (Docker, Poll SCM)
         ├─ Setup : 가상환경 신규 생성 → 의존성 설치
         ├─ Test  : pytest + 커버리지 측정
         └─ Post  : JUnit 결과 게시, 리포트 보관(htmlcov)
+                   실패 시 Discord 알림
 ```
 
 | 항목 | 내용 |
@@ -187,6 +190,7 @@ Jenkins (Docker, Poll SCM)
 | 파이프라인 | 선언형 `Jenkinsfile` (저장소에서 직접 로드) |
 | 트리거 | Poll SCM (`H/2 * * * *`) |
 | 테스트 | pytest, pytest-cov (`requirements-dev.txt`) |
+| 알림 | 빌드 실패 시 Discord 웹훅 전송 (웹훅 주소는 Jenkins Credentials에 저장, 저장소에는 없음) |
 | 실행 환경 | Linux, Python 3.13.5 |
 
 ### 실행 방법
@@ -196,7 +200,7 @@ docker compose -f docker/docker-compose.yml build
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-이후 `http://localhost:8080`에서 Jenkins 초기 설정을 마치고, Pipeline 작업의 SCM을 이 저장소와 `Jenkinsfile`로 지정합니다. 로컬 테스트는 다음과 같이 실행합니다.
+이후 `http://localhost:8080`에서 Jenkins 초기 설정을 마치고, Pipeline 작업의 SCM을 이 저장소와 `Jenkinsfile`로 지정합니다. 알림을 쓰려면 Jenkins Credentials에 `discord-webhook-url`(Secret text) 이름으로 웹훅 주소를 등록합니다. 로컬 테스트는 다음과 같이 실행합니다.
 
 ```powershell
 pip install -r requirements-dev.txt
@@ -206,7 +210,8 @@ pytest -v
 ### 테스트 설계
 
 - `tests/conftest.py`가 설정 폴더(`%APPDATA%`)를 임시 경로로 돌려, 테스트가 실제 `.env`와 사용자 설정을 건드리지 않습니다.
-- 외부 의존성(Yona API)은 `requests.get`을 대체(mock)하여 정상, 401, 404, 연결 오류, 비JSON 응답을 재현합니다.
+- 외부 의존성은 가짜 객체(mock)로 대체합니다. Yona API는 정상, 401, 404, 연결 오류, 비JSON 응답을 재현하고, Ollama는 연결 실패, 깨진 JSON, 필수 항목 누락 등 오류 처리 분기를 재현합니다.
+- 파일 저장은 임시 폴더(`tmp_path`)에서 수행해 실제 `testcase.xlsx`와 바탕화면을 건드리지 않습니다.
 - 매 빌드마다 가상환경을 삭제 후 새로 만들어, 이전 빌드의 잔여물이 결과에 영향을 주지 않도록 했습니다.
 
 ### 빌드 이력
@@ -219,6 +224,12 @@ pytest -v
 | #4 | 성공 | 커버리지 측정과 리포트 보관 추가, 전체 27% |
 | #5 | 실패 | `yona_client` 테스트 추가, 결함 재현 (14건 중 1건 실패), 전체 34% |
 | #6 | 성공 | 결함 수정 후 14건 통과 |
+| 이후 | 성공 | `excel_writer`(26건, 51%), `ai_client`(39건, 67%) 테스트 추가 |
+| 이후 | 실패→성공 | 버그 번호 추출 결함 재현 후 수정 (44건) |
+| 이후 | 실패→성공 | `Jenkinsfile` 문법 오류 수정, Discord 알림 연동 |
+| 이후 | 성공 | `bug_report_generator` 테스트 추가 (59건, 75%) |
+| #19 | 실패 | `null` 처리 결함 재현 (61건 중 2건 실패), Discord 알림 전송 확인 |
+| 이후 | 성공 | 결함 수정 후 61건 통과 |
 
 ### 테스트로 발견하고 수정한 결함
 
@@ -226,6 +237,10 @@ pytest -v
 |---|---|---|---|
 | 번호 제거 오류 | `3.14를 입력`이 `14를 입력`으로 변형 | 번호 제거 정규식이 소수점의 `3.`을 단계 번호로 오인 | 점 바로 뒤에 숫자가 오면 번호로 보지 않도록 정규식 수정, 회귀 테스트 추가 |
 | 비JSON 응답 미처리 | Yona가 JSON이 아닌 응답을 주면 `ValueError`가 그대로 노출 | `response.json()` 예외를 처리하지 않음 | `RuntimeError`로 변환하고 확인 안내 문구 추가 |
+| 버그 번호 오인 | 버전·날짜의 숫자(`18`, `2026`)를 버그 번호로 인식 | 본문의 첫 숫자를 사용하는 규칙 | `제목:` 뒤의 숫자를 우선 사용, 회귀 테스트 추가 |
+| `null` 값 미처리 | 모델이 `null`을 반환하면 `AttributeError` 발생 | `None`에 `.strip()`을 호출 | `or ""`로 방어 처리, 회귀 테스트 추가 |
+
+각 결함은 실패하는 테스트를 먼저 올려 빨간불을 남기고, 수정 후 초록불로 바뀌는 순서로 기록했습니다.
 
 ### 구축 중 해결한 문제
 
@@ -236,30 +251,30 @@ pytest -v
 | 코어 취약점 및 Java 17 지원 종료 경고 | 이미지 버전이 오래됨 | `lts-jdk21`로 교체 후 플러그인 업데이트, 볼륨 유지로 설정 보존 |
 | 컨테이너에 Python 없음 | 기본 Jenkins 이미지에는 Python이 없음 | Dockerfile로 Python을 추가한 전용 이미지 구성 |
 | compose 파일 YAML 오류 | 들여쓰기 불일치 | 공백 2칸 단위로 정리, `docker compose config`로 문법 검증 |
+| 파이프라인 시작 실패 (문법 오류) | `Jenkinsfile` 블록 교체 중 닫는 괄호 중복 | 중복 괄호 삭제 후 재푸시 |
 
 ### 커버리지 현황
 
 <img src="./img/jenkins.png" width="800">
 
-전체 **75%** (빌드 #18 기준).
+전체 **75%** (측정 대상 5개 모듈 기준, `main.py`·`gui.py`는 측정 대상이 아닙니다).
 
 | 모듈 | 커버리지 |
 |---|---|
+| `bug_report_generator.py` | 93% |
+| `excel_writer.py` | 89% |
+| `ai_client.py` | 72% |
 | `yona_client.py` | 63% |
-| `bug_report_generator.py` | 36% |
 | `paths.py` | 33% |
-| `ai_client.py` | 26% |
-| `excel_writer.py` | 24% |
 
-Ollama 호출, Excel 저장 경로 등은 아직 테스트가 닿지 않았으며, 다음 테스트 확대의 우선순위로 삼고 있습니다.
+Ollama와 Yona는 테스트에서 가짜 객체로 대체해 오류 처리 분기를 검증합니다. 실제 AI 응답 품질은 CI의 검증 대상이 아닙니다. `paths.py`의 Windows 전용 분기는 Linux 에이전트에서 실행되지 않아 낮게 남아 있습니다.
 
 ### 제약 및 향후 과제
 
 - 로컬 Jenkins는 외부에서 접근할 수 없어 GitHub 웹훅 대신 Poll SCM을 사용합니다. PC와 Docker가 실행 중일 때만 동작합니다.
 - 현재 파이프라인은 Jenkins 컨트롤러에서 직접 빌드합니다. 보안 권고에 따라 빌드를 별도 에이전트로 분리하는 것이 향후 과제입니다.
 - Windows `.exe` 패키징(PyInstaller) 단계는 아직 파이프라인에 포함되어 있지 않습니다.
-- 빌드 실패 알림은 아직 설정하지 않았습니다.
-
+- `main.py`와 `gui.py`에는 테스트가 없습니다.
 
 ## 기술 스택
 
@@ -360,8 +375,8 @@ ollama run qwen2.5:7b   # verify it works, exit with /bye
 **2) Project**
 ```powershell
 cd TCGenerator
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
@@ -407,6 +422,10 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 | `excel_writer.py` | Excel creation/saving, TC ID numbering, similarity check |
 | `paths.py` | Desktop path detection, persistent config folder (`%APPDATA%`) |
 | `icon.ico` | Executable icon |
+| `tests/` | pytest unit tests |
+| `Jenkinsfile` | Jenkins pipeline definition |
+| `docker/` | Jenkins runtime (Dockerfile, compose) |
+| `pytest.ini`, `requirements-dev.txt` | Test configuration and dev dependencies |
 
 ## Excel Columns
 
@@ -420,13 +439,17 @@ pyinstaller --onefile --windowed --name TCGenerator --icon=icon.ico gui.py
 - Multi-scenario extraction is CLI-only.
 - The duplicate warning is advisory and never blocks saving.
 
+---
+
 ## CI/CD (Jenkins)
 
-A Docker-based Jenkins pipeline runs tests and coverage automatically whenever changes are pushed to this repository (Poll SCM, `H/2 * * * *`).
+A Docker-based Jenkins pipeline runs tests and coverage automatically whenever changes are pushed to this repository (Poll SCM, `H/2 * * * *`). A failed build sends a Discord notification.
 
 - **Environment**: Docker Compose, `jenkins/jenkins:lts-jdk21` plus Python (`docker/Dockerfile`), Linux, Python 3.13.5
-- **Pipeline** (`Jenkinsfile`): Setup (fresh virtualenv per build) → Test (pytest + coverage) → Post (JUnit results, htmlcov artifacts)
-- **Test isolation**: `tests/conftest.py` redirects the config folder to a temp path; the Yona API is mocked to reproduce success, 401, 404, connection error, and non-JSON responses.
+- **Pipeline** (`Jenkinsfile`): Setup (fresh virtualenv per build) → Test (pytest + coverage) → Post (JUnit results, htmlcov artifacts, Discord alert on failure)
+- **Notification**: the webhook URL is stored in Jenkins Credentials (`discord-webhook-url`, Secret text), never in the repository.
+- **Test isolation**: `tests/conftest.py` redirects the config folder to a temp path; file output goes to `tmp_path`.
+- **Mocked dependencies**: the Yona API (success, 401, 404, connection error, non-JSON response) and Ollama (connection failure, malformed JSON, missing keys) are replaced with fakes to exercise error-handling branches.
 
 ### Build history
 
@@ -438,17 +461,53 @@ A Docker-based Jenkins pipeline runs tests and coverage automatically whenever c
 | #4 | Passed | Added coverage and artifacts, total 27% |
 | #5 | Failed | Added `yona_client` tests, reproduced a defect (1 of 14 failed), total 34% |
 | #6 | Passed | 14 passed after the fix |
+| later | Passed | Added `excel_writer` (26 tests, 51%) and `ai_client` (39 tests, 67%) tests |
+| later | Failed→Passed | Reproduced and fixed the bug-number extraction defect (44 tests) |
+| later | Failed→Passed | Fixed a `Jenkinsfile` syntax error, connected Discord notification |
+| later | Passed | Added `bug_report_generator` tests (59 tests, 75%) |
+| #19 | Failed | Reproduced a `null` handling defect (2 of 61 failed); Discord alert delivered |
+| later | Passed | 61 passed after the fix |
 
 ### Defects found by tests
 
 1. **Step-number stripping**: `3.14를 입력` was altered to `14를 입력` because the regex treated the decimal point as a step number. Fixed, with regression tests.
 2. **Non-JSON response**: a non-JSON reply from Yona surfaced a raw `ValueError`. It is now wrapped in a `RuntimeError` with guidance.
+3. **Bug-number misdetection**: numbers from a version or date (`18`, `2026`) were taken as the bug number because the first number in the text was used. The number after the `제목:` label is now preferred, with regression tests.
+4. **`null` values**: a `null` returned by the model caused an `AttributeError` from `None.strip()`. Now guarded with `or ""`, with regression tests.
 
-### Limitations
+Each defect was first committed as a failing test (red build) and then fixed (green build).
 
-- Poll SCM is used instead of webhooks because the local Jenkins is not reachable from outside.
+### Problems solved while building
+
+| Problem | Cause | Resolution |
+|---|---|---|
+| Docker Desktop would not install | Windows `Virtual Machine Platform` was disabled and needed admin rights | `wsl --install` in an admin PowerShell, reboot, all-users install |
+| 6 Jenkins plugins failed to install | Failures of 3 base plugins cascaded to 3 dependent ones (`Plugin is missing`) | Reinstalled the base plugins first, then the dependent ones |
+| Core vulnerability and Java 17 end-of-life warnings | Outdated image | Switched to `lts-jdk21`, updated plugins, kept the volume to preserve settings |
+| No Python in the container | The default Jenkins image does not include it | Added Python through a custom Dockerfile |
+| Compose file YAML error | Inconsistent indentation | Normalized to 2-space indents, validated with `docker compose config` |
+| Pipeline failed to start (syntax error) | Duplicate closing braces left after editing the `post` block | Removed the extra braces and pushed again |
+
+### Coverage
+
+Total **75%** across the 5 measured modules (`main.py` and `gui.py` are not measured).
+
+| Module | Coverage |
+|---|---|
+| `bug_report_generator.py` | 93% |
+| `excel_writer.py` | 89% |
+| `ai_client.py` | 72% |
+| `yona_client.py` | 63% |
+| `paths.py` | 33% |
+
+Ollama and Yona are replaced with fakes to exercise error-handling branches; the quality of real AI output is not verified by CI. The Windows-only branches in `paths.py` do not run on a Linux agent, which keeps its figure low.
+
+### Limitations and future work
+
+- Poll SCM is used instead of webhooks because the local Jenkins is not reachable from outside. It only works while the PC and Docker are running.
 - Builds currently run on the controller; separating them into an agent is a future task.
-- Windows `.exe` packaging and failure notifications are not yet part of the pipeline.
+- Windows `.exe` packaging is not yet part of the pipeline.
+- `main.py` and `gui.py` have no tests.
 
 ## Tech Stack
 
@@ -457,5 +516,3 @@ Python · Ollama (Qwen 2.5 7B) · Tkinter · openpyxl · requests · PyInstaller
 ---
 
 YuPark · ypark.uk@gmail.com
-
-<!-- CI trigger test -->
