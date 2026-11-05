@@ -216,20 +216,20 @@ pytest -v
 
 ### 빌드 이력
 
-| 빌드 | 결과 | 내용 |
-|---|---|---|
-| #1 | 실패 | 단위 테스트가 결함을 발견 (7건 중 1건 실패) |
-| #2 | 성공 | 결함 수정 후 8건 통과 |
-| #3 | 성공 | 푸시만으로 자동 시작됨을 확인 (`Started by an SCM change`) |
-| #4 | 성공 | 커버리지 측정과 리포트 보관 추가, 전체 27% |
-| #5 | 실패 | `yona_client` 테스트 추가, 결함 재현 (14건 중 1건 실패), 전체 34% |
-| #6 | 성공 | 결함 수정 후 14건 통과 |
+| 빌드 | 결과 | 내용                                                     |
+|---|---|--------------------------------------------------------|
+| #1 | 실패 | 단위 테스트가 결함을 발견 (7건 중 1건 실패)                            |
+| #2 | 성공 | 결함 수정 후 8건 통과                                          |
+| #3 | 성공 | 푸시만으로 자동 시작됨을 확인 (`Started by an SCM change`)          |
+| #4 | 성공 | 커버리지 측정과 리포트 보관 추가, 전체 27%                             |
+| #5 | 실패 | `yona_client` 테스트 추가, 결함 재현 (14건 중 1건 실패), 전체 34%      |
+| #6 | 성공 | 결함 수정 후 14건 통과                                         |
 | 이후 | 성공 | `excel_writer`(26건, 51%), `ai_client`(39건, 67%) 테스트 추가 |
-| 이후 | 실패→성공 | 버그 번호 추출 결함 재현 후 수정 (44건) |
-| 이후 | 실패→성공 | `Jenkinsfile` 문법 오류 수정, Discord 알림 연동 |
-| 이후 | 성공 | `bug_report_generator` 테스트 추가 (59건, 75%) |
-| #19 | 실패 | `null` 처리 결함 재현 (61건 중 2건 실패), Discord 알림 전송 확인 |
-| 이후 | 성공 | 결함 수정 후 61건 통과 |
+| 이후 | 실패→성공 | 버그 번호 추출 결함 재현 후 수정 (44건)                              |
+| 이후 | 실패→성공 | `Jenkinsfile` 문법 오류 수정, Discord 알림 연동                  |
+| 이후 | 성공 | `bug_report_generator` 테스트 추가 (59건, 75%)               |
+| #19 | 실패 | `null` 처리 결함 재현 (61건 중 2건 실패), Discord 알림 전송 확인        |
+| 이후 | 성공 | 결함 수정 후 69건 통과                                         |
 
 ### 테스트로 발견하고 수정한 결함
 
@@ -453,20 +453,20 @@ A Docker-based Jenkins pipeline runs tests and coverage automatically whenever c
 
 ### Build history
 
-| Build | Result | Note |
-|---|---|---|
-| #1 | Failed | Unit test exposed a defect (1 of 7 failed) |
-| #2 | Passed | 8 passed after the fix |
-| #3 | Passed | Confirmed automatic start on push |
-| #4 | Passed | Added coverage and artifacts, total 27% |
-| #5 | Failed | Added `yona_client` tests, reproduced a defect (1 of 14 failed), total 34% |
-| #6 | Passed | 14 passed after the fix |
-| later | Passed | Added `excel_writer` (26 tests, 51%) and `ai_client` (39 tests, 67%) tests |
-| later | Failed→Passed | Reproduced and fixed the bug-number extraction defect (44 tests) |
-| later | Failed→Passed | Fixed a `Jenkinsfile` syntax error, connected Discord notification |
-| later | Passed | Added `bug_report_generator` tests (59 tests, 75%) |
+| Build | Result | Note                                                                          |
+|---|---|-------------------------------------------------------------------------------|
+| #1 | Failed | Unit test exposed a defect (1 of 7 failed)                                    |
+| #2 | Passed | 8 passed after the fix                                                        |
+| #3 | Passed | Confirmed automatic start on push                                             |
+| #4 | Passed | Added coverage and artifacts, total 27%                                       |
+| #5 | Failed | Added `yona_client` tests, reproduced a defect (1 of 14 failed), total 34%    |
+| #6 | Passed | 14 passed after the fix                                                       |
+| later | Passed | Added `excel_writer` (26 tests, 51%) and `ai_client` (39 tests, 67%) tests    |
+| later | Failed→Passed | Reproduced and fixed the bug-number extraction defect (44 tests)              |
+| later | Failed→Passed | Fixed a `Jenkinsfile` syntax error, connected Discord notification            |
+| later | Passed | Added `bug_report_generator` tests (59 tests, 75%)                            |
 | #19 | Failed | Reproduced a `null` handling defect (2 of 61 failed); Discord alert delivered |
-| later | Passed | 61 passed after the fix |
+| later | Passed | 69 passed after the fix                                                       |
 
 ### Defects found by tests
 

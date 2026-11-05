@@ -434,7 +434,7 @@ def _strip_chinese_from_tc(tc_data: dict) -> dict:
 
 def generate_test_case(bug_report_text: str, scenario_hint: str = "") -> dict:
 
-    client = Client()  # 기본값으로 http://localhost:11434 에 연결
+    client = Client()
 
     user_content = f"[버그 리포트]\n{bug_report_text}"
     if scenario_hint:
