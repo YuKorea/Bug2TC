@@ -1,0 +1,5 @@
+exclude = [".venv", ".venv-ci", "build", "dist", "reports"]
+
+[lint]
+select = ["E", "F"]  # 'E'는 코드스타일 오류, "F"는 사용하지 않는 import나 변수 같은 기본 / E501(줄 길이)은 프롬프트 문자열이 긴 소스에서 의미 없는 경고
+ignore = ["E501"]
