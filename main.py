@@ -166,7 +166,7 @@ def run_multi(bug_report: str) -> None:
         check_duplicates_and_warn(tc_data)
 
     selection_raw = input(
-        f"\n저장할 번호를 입력하세요 (예: 1,3 / all=전체 / n=저장 안 함): "
+        "\n저장할 번호를 입력하세요 (예: 1,3 / all=전체 / n=저장 안 함): "
     ).strip()
     selected_indices = _parse_selection(selection_raw, len(tc_list))
 
@@ -418,7 +418,6 @@ def run_coverage_analysis() -> None:
         print(f"\n[예상치 못한 오류] {type(e).__name__}: {e}")
         return
 
-    covered = [p for p in points if p.get("covered")]
     missing = [p for p in points if not p.get("covered")]
 
     print(f"\n버그 검증 포인트 ({len(points)}건):\n")

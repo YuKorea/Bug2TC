@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 
 from ai_client import generate_test_case, analyze_bug_coverage
-from excel_writer import append_test_case, find_similar_test_cases, get_tc_summaries_for_bug, COLUMNS
+from excel_writer import append_test_case, find_similar_test_cases, get_tc_summaries_for_bug
 from bug_report_generator import (
     generate_bug_report_fields,
     format_bug_report,
@@ -1062,7 +1062,7 @@ class TestCaseGeneratorApp:
 
 def main():
     root = tk.Tk()
-    app = TestCaseGeneratorApp(root)
+    _app = TestCaseGeneratorApp(root)
     root.mainloop()
 
 

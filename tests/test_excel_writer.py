@@ -1,7 +1,7 @@
 import pytest
 from openpyxl import load_workbook
 
-import excel_writer
+
 from excel_writer import (
     COLUMNS,
     _similarity,
