@@ -230,6 +230,7 @@ pytest -v
 | 이후 | 성공 | `bug_report_generator` 테스트 추가 (59건, 75%)               |
 | #19 | 실패 | `null` 처리 결함 재현 (61건 중 2건 실패), Discord 알림 전송 확인        |
 | 이후 | 성공 | 결함 수정 후 69건 통과                                         |
+| 이후 | 성공 | `paths` 테스트 추가와 커버리지 하한(70%) 적용 (69건, 78%) |
 
 ### 테스트로 발견하고 수정한 결함
 
@@ -257,15 +258,15 @@ pytest -v
 
 <img src="./img/jenkins.png" width="800">
 
-전체 **75%** (측정 대상 5개 모듈 기준, `main.py`·`gui.py`는 측정 대상이 아닙니다).
+전체 **78%** (측정 대상 5개 모듈 기준, `main.py`·`gui.py`는 측정 대상이 아닙니다). 하한 70% 미만이면 빌드가 실패하도록 설정했습니다.
 
 | 모듈 | 커버리지 |
-|---|---|
-| `bug_report_generator.py` | 93% |
-| `excel_writer.py` | 89% |
-| `ai_client.py` | 72% |
-| `yona_client.py` | 63% |
-| `paths.py` | 33% |
+|---|------|
+| `bug_report_generator.py` | 93%  |
+| `excel_writer.py` | 89%  |
+| `ai_client.py` | 72%  |
+| `yona_client.py` | 63%  |
+| `paths.py` | 82%  |
 
 Ollama와 Yona는 테스트에서 가짜 객체로 대체해 오류 처리 분기를 검증합니다. 실제 AI 응답 품질은 CI의 검증 대상이 아닙니다. `paths.py`의 Windows 전용 분기는 Linux 에이전트에서 실행되지 않아 낮게 남아 있습니다.
 
@@ -490,15 +491,15 @@ Each defect was first committed as a failing test (red build) and then fixed (gr
 
 ### Coverage
 
-Total **75%** across the 5 measured modules (`main.py` and `gui.py` are not measured).
+Total **78%** across the 5 measured modules (`main.py` and `gui.py` are not measured).
 
 | Module | Coverage |
-|---|---|
-| `bug_report_generator.py` | 93% |
-| `excel_writer.py` | 89% |
-| `ai_client.py` | 72% |
-| `yona_client.py` | 63% |
-| `paths.py` | 33% |
+|---|----------|
+| `bug_report_generator.py` | 93%      |
+| `excel_writer.py` | 89%      |
+| `ai_client.py` | 72%      |
+| `yona_client.py` | 63%      |
+| `paths.py` | 82%      |
 
 Ollama and Yona are replaced with fakes to exercise error-handling branches; the quality of real AI output is not verified by CI. The Windows-only branches in `paths.py` do not run on a Linux agent, which keeps its figure low.
 
